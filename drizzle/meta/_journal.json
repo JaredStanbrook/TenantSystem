@@ -1,0 +1,34 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1742562434874,
+      "tag": "0000_gigantic_odin",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1742566328040,
+      "tag": "0001_amused_omega_red",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1742572131861,
+      "tag": "0002_silly_doctor_spectrum",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1742572266540,
+      "tag": "0003_volatile_ken_ellis",
+      "breakpoints": true
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+name = "tenant_system"
+compatibility_date = "2024-08-30"
+main = "server/index.ts"
+assets = { directory = "./frontend/dist", binding = "ASSETS", html_handling = "auto-trailing-slash", not_found_handling = "single-page-application" }
+
+routes = [
+  { pattern = "home.jaredstanbrook.com", zone_name = "jaredstanbrook.com",  custom_domain = true }
+]
+
+[vars]
+JWT_SECRET = "secret"
+
+[observability]
+enabled = true
+
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "professional-portfolio-r2"
+preview_bucket_name = "professional-portfolio-r2"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "sheoak_ct"
+database_id = "d7576980-ebdc-4c9b-98f0-f4e75035042c"
+migrations_dir = "drizzle"
+
+[dev]
+port = 3000
+local_protocol = "http"
+
+[build]
+command = "bun run build"
+cwd = "./frontend"
