@@ -11,34 +11,22 @@
 // Import Routes
 
 import { Route as rootRoute } from './routes/__root'
-import { Route as SignupImport } from './routes/signup'
-import { Route as LoginImport } from './routes/login'
-import { Route as ForgotPasswordImport } from './routes/forgot-password'
 import { Route as AboutImport } from './routes/about'
 import { Route as AuthenticatedImport } from './routes/_authenticated'
+import { Route as AuthImport } from './routes/_auth'
+import { Route as IndexImport } from './routes/index'
+import { Route as AdminIndexImport } from './routes/admin/index'
 import { Route as AuthenticatedIndexImport } from './routes/_authenticated/index'
+import { Route as AdminPropertyImport } from './routes/admin/property'
+import { Route as AdminCreatePropertyImport } from './routes/admin/create-property'
 import { Route as AuthenticatedProfileImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedExpenseImport } from './routes/_authenticated/expense'
 import { Route as AuthenticatedCreateExpenseImport } from './routes/_authenticated/create-expense'
-import { Route as AuthenticatedAdminImport } from './routes/_authenticated/_admin'
-import { Route as AuthenticatedAdminAdminImport } from './routes/_authenticated/_admin/admin'
+import { Route as AuthSignupImport } from './routes/_auth/signup'
+import { Route as AuthLoginImport } from './routes/_auth/login'
+import { Route as AuthForgotPasswordImport } from './routes/_auth/forgot-password'
 
 // Create/Update Routes
-
-const SignupRoute = SignupImport.update({
-  path: '/signup',
-  getParentRoute: () => rootRoute,
-} as any)
-
-const LoginRoute = LoginImport.update({
-  path: '/login',
-  getParentRoute: () => rootRoute,
-} as any)
-
-const ForgotPasswordRoute = ForgotPasswordImport.update({
-  path: '/forgot-password',
-  getParentRoute: () => rootRoute,
-} as any)
 
 const AboutRoute = AboutImport.update({
   path: '/about',
@@ -50,9 +38,34 @@ const AuthenticatedRoute = AuthenticatedImport.update({
   getParentRoute: () => rootRoute,
 } as any)
 
+const AuthRoute = AuthImport.update({
+  id: '/_auth',
+  getParentRoute: () => rootRoute,
+} as any)
+
+const IndexRoute = IndexImport.update({
+  path: '/',
+  getParentRoute: () => rootRoute,
+} as any)
+
+const AdminIndexRoute = AdminIndexImport.update({
+  path: '/admin/',
+  getParentRoute: () => rootRoute,
+} as any)
+
 const AuthenticatedIndexRoute = AuthenticatedIndexImport.update({
   path: '/',
   getParentRoute: () => AuthenticatedRoute,
+} as any)
+
+const AdminPropertyRoute = AdminPropertyImport.update({
+  path: '/admin/property',
+  getParentRoute: () => rootRoute,
+} as any)
+
+const AdminCreatePropertyRoute = AdminCreatePropertyImport.update({
+  path: '/admin/create-property',
+  getParentRoute: () => rootRoute,
 } as any)
 
 const AuthenticatedProfileRoute = AuthenticatedProfileImport.update({
@@ -72,20 +85,39 @@ const AuthenticatedCreateExpenseRoute = AuthenticatedCreateExpenseImport.update(
   } as any,
 )
 
-const AuthenticatedAdminRoute = AuthenticatedAdminImport.update({
-  id: '/_admin',
-  getParentRoute: () => AuthenticatedRoute,
+const AuthSignupRoute = AuthSignupImport.update({
+  path: '/signup',
+  getParentRoute: () => AuthRoute,
 } as any)
 
-const AuthenticatedAdminAdminRoute = AuthenticatedAdminAdminImport.update({
-  path: '/admin',
-  getParentRoute: () => AuthenticatedAdminRoute,
+const AuthLoginRoute = AuthLoginImport.update({
+  path: '/login',
+  getParentRoute: () => AuthRoute,
+} as any)
+
+const AuthForgotPasswordRoute = AuthForgotPasswordImport.update({
+  path: '/forgot-password',
+  getParentRoute: () => AuthRoute,
 } as any)
 
 // Populate the FileRoutesByPath interface
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexImport
+      parentRoute: typeof rootRoute
+    }
+    '/_auth': {
+      id: '/_auth'
+      path: ''
+      fullPath: ''
+      preLoaderRoute: typeof AuthImport
+      parentRoute: typeof rootRoute
+    }
     '/_authenticated': {
       id: '/_authenticated'
       path: ''
@@ -100,33 +132,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AboutImport
       parentRoute: typeof rootRoute
     }
-    '/forgot-password': {
-      id: '/forgot-password'
+    '/_auth/forgot-password': {
+      id: '/_auth/forgot-password'
       path: '/forgot-password'
       fullPath: '/forgot-password'
-      preLoaderRoute: typeof ForgotPasswordImport
-      parentRoute: typeof rootRoute
+      preLoaderRoute: typeof AuthForgotPasswordImport
+      parentRoute: typeof AuthImport
     }
-    '/login': {
-      id: '/login'
+    '/_auth/login': {
+      id: '/_auth/login'
       path: '/login'
       fullPath: '/login'
-      preLoaderRoute: typeof LoginImport
-      parentRoute: typeof rootRoute
+      preLoaderRoute: typeof AuthLoginImport
+      parentRoute: typeof AuthImport
     }
-    '/signup': {
-      id: '/signup'
+    '/_auth/signup': {
+      id: '/_auth/signup'
       path: '/signup'
       fullPath: '/signup'
-      preLoaderRoute: typeof SignupImport
-      parentRoute: typeof rootRoute
-    }
-    '/_authenticated/_admin': {
-      id: '/_authenticated/_admin'
-      path: ''
-      fullPath: ''
-      preLoaderRoute: typeof AuthenticatedAdminImport
-      parentRoute: typeof AuthenticatedImport
+      preLoaderRoute: typeof AuthSignupImport
+      parentRoute: typeof AuthImport
     }
     '/_authenticated/create-expense': {
       id: '/_authenticated/create-expense'
@@ -149,6 +174,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProfileImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/admin/create-property': {
+      id: '/admin/create-property'
+      path: '/admin/create-property'
+      fullPath: '/admin/create-property'
+      preLoaderRoute: typeof AdminCreatePropertyImport
+      parentRoute: typeof rootRoute
+    }
+    '/admin/property': {
+      id: '/admin/property'
+      path: '/admin/property'
+      fullPath: '/admin/property'
+      preLoaderRoute: typeof AdminPropertyImport
+      parentRoute: typeof rootRoute
+    }
     '/_authenticated/': {
       id: '/_authenticated/'
       path: '/'
@@ -156,31 +195,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedIndexImport
       parentRoute: typeof AuthenticatedImport
     }
-    '/_authenticated/_admin/admin': {
-      id: '/_authenticated/_admin/admin'
+    '/admin/': {
+      id: '/admin/'
       path: '/admin'
       fullPath: '/admin'
-      preLoaderRoute: typeof AuthenticatedAdminAdminImport
-      parentRoute: typeof AuthenticatedAdminImport
+      preLoaderRoute: typeof AdminIndexImport
+      parentRoute: typeof rootRoute
     }
   }
 }
 
 // Create and export the route tree
 
-interface AuthenticatedAdminRouteChildren {
-  AuthenticatedAdminAdminRoute: typeof AuthenticatedAdminAdminRoute
+interface AuthRouteChildren {
+  AuthForgotPasswordRoute: typeof AuthForgotPasswordRoute
+  AuthLoginRoute: typeof AuthLoginRoute
+  AuthSignupRoute: typeof AuthSignupRoute
 }
 
-const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
-  AuthenticatedAdminAdminRoute: AuthenticatedAdminAdminRoute,
+const AuthRouteChildren: AuthRouteChildren = {
+  AuthForgotPasswordRoute: AuthForgotPasswordRoute,
+  AuthLoginRoute: AuthLoginRoute,
+  AuthSignupRoute: AuthSignupRoute,
 }
 
-const AuthenticatedAdminRouteWithChildren =
-  AuthenticatedAdminRoute._addFileChildren(AuthenticatedAdminRouteChildren)
+const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 
 interface AuthenticatedRouteChildren {
-  AuthenticatedAdminRoute: typeof AuthenticatedAdminRouteWithChildren
   AuthenticatedCreateExpenseRoute: typeof AuthenticatedCreateExpenseRoute
   AuthenticatedExpenseRoute: typeof AuthenticatedExpenseRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
@@ -188,7 +229,6 @@ interface AuthenticatedRouteChildren {
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
-  AuthenticatedAdminRoute: AuthenticatedAdminRouteWithChildren,
   AuthenticatedCreateExpenseRoute: AuthenticatedCreateExpenseRoute,
   AuthenticatedExpenseRoute: AuthenticatedExpenseRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
@@ -200,49 +240,57 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
 )
 
 export interface FileRoutesByFullPath {
-  '': typeof AuthenticatedAdminRouteWithChildren
+  '/': typeof AuthenticatedIndexRoute
+  '': typeof AuthenticatedRouteWithChildren
   '/about': typeof AboutRoute
-  '/forgot-password': typeof ForgotPasswordRoute
-  '/login': typeof LoginRoute
-  '/signup': typeof SignupRoute
+  '/forgot-password': typeof AuthForgotPasswordRoute
+  '/login': typeof AuthLoginRoute
+  '/signup': typeof AuthSignupRoute
   '/create-expense': typeof AuthenticatedCreateExpenseRoute
   '/expense': typeof AuthenticatedExpenseRoute
   '/profile': typeof AuthenticatedProfileRoute
-  '/': typeof AuthenticatedIndexRoute
-  '/admin': typeof AuthenticatedAdminAdminRoute
+  '/admin/create-property': typeof AdminCreatePropertyRoute
+  '/admin/property': typeof AdminPropertyRoute
+  '/admin': typeof AdminIndexRoute
 }
 
 export interface FileRoutesByTo {
+  '/': typeof AuthenticatedIndexRoute
+  '': typeof AuthRouteWithChildren
   '/about': typeof AboutRoute
-  '/forgot-password': typeof ForgotPasswordRoute
-  '/login': typeof LoginRoute
-  '/signup': typeof SignupRoute
-  '': typeof AuthenticatedAdminRouteWithChildren
+  '/forgot-password': typeof AuthForgotPasswordRoute
+  '/login': typeof AuthLoginRoute
+  '/signup': typeof AuthSignupRoute
   '/create-expense': typeof AuthenticatedCreateExpenseRoute
   '/expense': typeof AuthenticatedExpenseRoute
   '/profile': typeof AuthenticatedProfileRoute
-  '/': typeof AuthenticatedIndexRoute
-  '/admin': typeof AuthenticatedAdminAdminRoute
+  '/admin/create-property': typeof AdminCreatePropertyRoute
+  '/admin/property': typeof AdminPropertyRoute
+  '/admin': typeof AdminIndexRoute
 }
 
 export interface FileRoutesById {
   __root__: typeof rootRoute
+  '/': typeof IndexRoute
+  '/_auth': typeof AuthRouteWithChildren
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/about': typeof AboutRoute
-  '/forgot-password': typeof ForgotPasswordRoute
-  '/login': typeof LoginRoute
-  '/signup': typeof SignupRoute
-  '/_authenticated/_admin': typeof AuthenticatedAdminRouteWithChildren
+  '/_auth/forgot-password': typeof AuthForgotPasswordRoute
+  '/_auth/login': typeof AuthLoginRoute
+  '/_auth/signup': typeof AuthSignupRoute
   '/_authenticated/create-expense': typeof AuthenticatedCreateExpenseRoute
   '/_authenticated/expense': typeof AuthenticatedExpenseRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
+  '/admin/create-property': typeof AdminCreatePropertyRoute
+  '/admin/property': typeof AdminPropertyRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
-  '/_authenticated/_admin/admin': typeof AuthenticatedAdminAdminRoute
+  '/admin/': typeof AdminIndexRoute
 }
 
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
+    | '/'
     | ''
     | '/about'
     | '/forgot-password'
@@ -251,50 +299,60 @@ export interface FileRouteTypes {
     | '/create-expense'
     | '/expense'
     | '/profile'
-    | '/'
+    | '/admin/create-property'
+    | '/admin/property'
     | '/admin'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/'
+    | ''
     | '/about'
     | '/forgot-password'
     | '/login'
     | '/signup'
-    | ''
     | '/create-expense'
     | '/expense'
     | '/profile'
-    | '/'
+    | '/admin/create-property'
+    | '/admin/property'
     | '/admin'
   id:
     | '__root__'
+    | '/'
+    | '/_auth'
     | '/_authenticated'
     | '/about'
-    | '/forgot-password'
-    | '/login'
-    | '/signup'
-    | '/_authenticated/_admin'
+    | '/_auth/forgot-password'
+    | '/_auth/login'
+    | '/_auth/signup'
     | '/_authenticated/create-expense'
     | '/_authenticated/expense'
     | '/_authenticated/profile'
+    | '/admin/create-property'
+    | '/admin/property'
     | '/_authenticated/'
-    | '/_authenticated/_admin/admin'
+    | '/admin/'
   fileRoutesById: FileRoutesById
 }
 
 export interface RootRouteChildren {
+  IndexRoute: typeof IndexRoute
+  AuthRoute: typeof AuthRouteWithChildren
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AboutRoute: typeof AboutRoute
-  ForgotPasswordRoute: typeof ForgotPasswordRoute
-  LoginRoute: typeof LoginRoute
-  SignupRoute: typeof SignupRoute
+  AdminCreatePropertyRoute: typeof AdminCreatePropertyRoute
+  AdminPropertyRoute: typeof AdminPropertyRoute
+  AdminIndexRoute: typeof AdminIndexRoute
 }
 
 const rootRouteChildren: RootRouteChildren = {
+  IndexRoute: IndexRoute,
+  AuthRoute: AuthRouteWithChildren,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AboutRoute: AboutRoute,
-  ForgotPasswordRoute: ForgotPasswordRoute,
-  LoginRoute: LoginRoute,
-  SignupRoute: SignupRoute,
+  AdminCreatePropertyRoute: AdminCreatePropertyRoute,
+  AdminPropertyRoute: AdminPropertyRoute,
+  AdminIndexRoute: AdminIndexRoute,
 }
 
 export const routeTree = rootRoute
@@ -309,17 +367,29 @@ export const routeTree = rootRoute
     "__root__": {
       "filePath": "__root.tsx",
       "children": [
+        "/",
+        "/_auth",
         "/_authenticated",
         "/about",
-        "/forgot-password",
-        "/login",
-        "/signup"
+        "/admin/create-property",
+        "/admin/property",
+        "/admin/"
+      ]
+    },
+    "/": {
+      "filePath": "index.tsx"
+    },
+    "/_auth": {
+      "filePath": "_auth.tsx",
+      "children": [
+        "/_auth/forgot-password",
+        "/_auth/login",
+        "/_auth/signup"
       ]
     },
     "/_authenticated": {
       "filePath": "_authenticated.tsx",
       "children": [
-        "/_authenticated/_admin",
         "/_authenticated/create-expense",
         "/_authenticated/expense",
         "/_authenticated/profile",
@@ -329,21 +399,17 @@ export const routeTree = rootRoute
     "/about": {
       "filePath": "about.tsx"
     },
-    "/forgot-password": {
-      "filePath": "forgot-password.tsx"
+    "/_auth/forgot-password": {
+      "filePath": "_auth/forgot-password.tsx",
+      "parent": "/_auth"
     },
-    "/login": {
-      "filePath": "login.tsx"
+    "/_auth/login": {
+      "filePath": "_auth/login.tsx",
+      "parent": "/_auth"
     },
-    "/signup": {
-      "filePath": "signup.tsx"
-    },
-    "/_authenticated/_admin": {
-      "filePath": "_authenticated/_admin.tsx",
-      "parent": "/_authenticated",
-      "children": [
-        "/_authenticated/_admin/admin"
-      ]
+    "/_auth/signup": {
+      "filePath": "_auth/signup.tsx",
+      "parent": "/_auth"
     },
     "/_authenticated/create-expense": {
       "filePath": "_authenticated/create-expense.tsx",
@@ -357,13 +423,18 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/profile.tsx",
       "parent": "/_authenticated"
     },
+    "/admin/create-property": {
+      "filePath": "admin/create-property.tsx"
+    },
+    "/admin/property": {
+      "filePath": "admin/property.tsx"
+    },
     "/_authenticated/": {
       "filePath": "_authenticated/index.tsx",
       "parent": "/_authenticated"
     },
-    "/_authenticated/_admin/admin": {
-      "filePath": "_authenticated/_admin/admin.tsx",
-      "parent": "/_authenticated/_admin"
+    "/admin/": {
+      "filePath": "admin/index.tsx"
     }
   }
 }

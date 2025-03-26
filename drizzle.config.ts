@@ -3,12 +3,12 @@ import { defineConfig } from "drizzle-kit";
 export default defineConfig({
   out: "./drizzle",
   schema: [
-    "./server/db/schema/expenses.ts",
-    "./server/db/schema/sessions.ts",
-    "./server/db/schema/bills.ts",
-    "./server/db/schema/users.ts",
-    "./server/db/schema/properties.ts",
-    "./server/db/schema/tenantProperty.ts",
+    "./server/db/schema/expense.ts",
+    "./server/db/schema/session.ts",
+    "./server/db/schema/bill.ts",
+    "./server/db/schema/user.ts",
+    "./server/db/schema/property.ts",
+    "./server/db/schema/userProperty.ts",
   ],
   dialect: "sqlite",
 });

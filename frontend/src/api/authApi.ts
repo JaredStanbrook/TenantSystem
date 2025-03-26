@@ -1,6 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 
-import { api } from "@/lib/apiClient";
+import { api } from "@/api/apiClient";
 import { type CreateUser } from "@server/sharedTypes";
 
 export const auth = api.auth;

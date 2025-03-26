@@ -1,9 +1,9 @@
 import { queryOptions } from "@tanstack/react-query";
 
-import { api } from "@/lib/apiClient";
+import { api } from "@/api/apiClient";
 import { type CreateBill } from "@server/sharedTypes";
 
-export const bill = api.bill;
+export const bill = api.bills;
 
 export async function getAllBill() {
   const res = await bill.$get();

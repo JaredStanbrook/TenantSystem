@@ -3,8 +3,8 @@ import { zValidator } from "@hono/zod-validator";
 
 import { dbMiddleware, luciaMiddleware } from "../db";
 
-import { bills as billTable, insertBillSchema, selectBillSchema } from "../db/schema/bills";
-import { users as userTable } from "../db/schema/users";
+import { bill as billTable, insertBillSchema, selectBillSchema } from "../db/schema/bill";
+import { user as userTable } from "../db/schema/user";
 import { eq, desc, sum, and } from "drizzle-orm";
 
 import { createBillSchema } from "../sharedTypes";
@@ -22,7 +22,7 @@ export const billRoute = new Hono<{ Bindings: Env }>()
         email: userTable.email,
         title: billTable.title,
         amount: billTable.amount,
-        date: billTable.dateDue,
+        date: billTable.dueDate,
         createdAt: billTable.createdAt,
       })
       .from(billTable)

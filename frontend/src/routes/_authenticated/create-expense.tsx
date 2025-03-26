@@ -1,80 +1,86 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
-import { toast } from "sonner";
-import { useForm } from "@tanstack/react-form";
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
+import { Calendar } from '@/components/ui/calendar'
+import { toast } from 'sonner'
+import { useForm } from '@tanstack/react-form'
 import {
   createExpense,
   getAllExpenseQueryOptions,
   loadingCreateExpenseQueryOptions,
-} from "@/lib/expenseApi";
-import { useQueryClient } from "@tanstack/react-query";
+} from '@/api/expenseApi'
+import { useQueryClient } from '@tanstack/react-query'
 
-import { zodValidator } from "@tanstack/zod-form-adapter";
+import { zodValidator } from '@tanstack/zod-form-adapter'
 
-import { createExpenseSchema } from "@server/sharedTypes";
+import { createExpenseSchema } from '@server/sharedTypes'
 
-export const Route = createFileRoute("/_authenticated/create-expense")({
+export const Route = createFileRoute('/_authenticated/create-expense')({
   component: CreateExpense,
-});
+})
 
 function CreateExpense() {
-  const queryClient = useQueryClient();
-  const { user } = Route.useRouteContext();
-  const navigate = useNavigate();
+  const queryClient = useQueryClient()
+  const { user } = Route.useRouteContext()
+  const navigate = useNavigate()
 
   const form = useForm({
     validatorAdapter: zodValidator(),
     defaultValues: {
-      title: "",
-      amount: "0",
+      title: '',
+      amount: '0',
       date: new Date().toISOString(),
-      description: "Nothing to see here!",
+      description: 'Nothing to see here!',
     },
     onSubmit: async ({ value }) => {
-      const existingExpense = await queryClient.ensureQueryData(getAllExpenseQueryOptions);
-      navigate({ to: "/expense" });
+      const existingExpense = await queryClient.ensureQueryData(
+        getAllExpenseQueryOptions,
+      )
+      navigate({ to: '/expense' })
       // loading state
       queryClient.setQueryData(loadingCreateExpenseQueryOptions.queryKey, {
         expense: value,
-      });
+      })
       try {
-        const newExpense = await createExpense({ value });
+        const newExpense = await createExpense({ value })
 
         queryClient.setQueryData(getAllExpenseQueryOptions.queryKey, {
           ...existingExpense,
-          expense: [{ ...newExpense, email: user.email }, ...existingExpense.expense],
-        });
+          expense: [
+            { ...newExpense, email: user.email },
+            ...existingExpense.expense,
+          ],
+        })
 
-        toast("Expense Created", {
+        toast('Expense Created', {
           description: `Successfully created new expense: ${newExpense.id}`,
-        });
+        })
         // success state
       } catch (error: unknown) {
-        console.error("Error while creating expense:", error);
+        console.error('Error while creating expense:', error)
         if (error instanceof Error) {
-          toast("Error", { description: error.message || "An error occurred" });
+          toast('Error', { description: error.message || 'An error occurred' })
         } else {
-          toast("Error", { description: "An unexpected error occurred" });
+          toast('Error', { description: 'An unexpected error occurred' })
         }
       } finally {
-        queryClient.setQueryData(loadingCreateExpenseQueryOptions.queryKey, {});
+        queryClient.setQueryData(loadingCreateExpenseQueryOptions.queryKey, {})
       }
     },
-  });
+  })
 
   return (
     <div className="p-2">
       <h2>Create Expense</h2>
       <form
         onSubmit={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          void form.handleSubmit();
+          e.preventDefault()
+          e.stopPropagation()
+          void form.handleSubmit()
         }}
-        className="flex flex-col gap-y-4 max-w-xl m-auto">
+        className="flex flex-col gap-y-4 max-w-xl m-auto"
+      >
         <form.Field
           name="title"
           validators={{
@@ -90,7 +96,9 @@ function CreateExpense() {
                 onBlur={field.handleBlur}
                 onChange={(e) => field.handleChange(e.target.value)}
               />
-              {field.state.meta.isTouched ? <em>{field.state.meta.isTouched}</em> : null}
+              {field.state.meta.isTouched ? (
+                <em>{field.state.meta.isTouched}</em>
+              ) : null}
             </div>
           )}
         />
@@ -109,7 +117,9 @@ function CreateExpense() {
                 onBlur={field.handleBlur}
                 onChange={(e) => field.handleChange(e.target.value)}
               />
-              {field.state.meta.isTouched ? <em>{field.state.meta.isTouched}</em> : null}
+              {field.state.meta.isTouched ? (
+                <em>{field.state.meta.isTouched}</em>
+              ) : null}
             </div>
           )}
         />
@@ -129,7 +139,9 @@ function CreateExpense() {
                 type="number"
                 onChange={(e) => field.handleChange(e.target.value)}
               />
-              {field.state.meta.isTouched ? <em>{field.state.meta.isTouched}</em> : null}
+              {field.state.meta.isTouched ? (
+                <em>{field.state.meta.isTouched}</em>
+              ) : null}
             </div>
           )}
         />
@@ -144,10 +156,14 @@ function CreateExpense() {
               <Calendar
                 mode="single"
                 selected={new Date(field.state.value)}
-                onSelect={(date) => field.handleChange((date ?? new Date()).toISOString())}
+                onSelect={(date) =>
+                  field.handleChange((date ?? new Date()).toISOString())
+                }
                 className="rounded-md border"
               />
-              {field.state.meta.isTouched ? <em>{field.state.meta.isTouched}</em> : null}
+              {field.state.meta.isTouched ? (
+                <em>{field.state.meta.isTouched}</em>
+              ) : null}
             </div>
           )}
         />
@@ -156,11 +172,11 @@ function CreateExpense() {
           selector={(state) => [state.canSubmit, state.isSubmitting]}
           children={([canSubmit, isSubmitting]) => (
             <Button className="mt-4" type="submit" disabled={!canSubmit}>
-              {isSubmitting ? "..." : "Submit"}
+              {isSubmitting ? '...' : 'Submit'}
             </Button>
           )}
         />
       </form>
     </div>
-  );
+  )
 }

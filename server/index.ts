@@ -5,6 +5,7 @@ import { cors } from "hono/cors";
 import { expenseRoute } from "./routes/expense";
 import { billRoute } from "./routes/bill";
 import { authRoute } from "./routes/auth";
+import { propertyRoute } from "./routes/property";
 
 const app = new Hono<{ Bindings: Env }>()
   .use("*", logger())
@@ -16,8 +17,9 @@ const app = new Hono<{ Bindings: Env }>()
   )
   .basePath("/api")
   .route("/auth", authRoute)
-  .route("/expense", expenseRoute)
-  .route("/bill", billRoute)
+  .route("/expenses", expenseRoute)
+  .route("/bills", billRoute)
+  .route("/properties", propertyRoute)
   .get("/*", async (c) => {
     const object = await c.env.R2.get(c.req.path.slice(1));
     if (object != null) {

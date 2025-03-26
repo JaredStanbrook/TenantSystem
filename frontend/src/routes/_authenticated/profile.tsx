@@ -1,14 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { logoutUser } from "@/lib/authApi";
+import { logoutUser } from "@/api/authApi";
 //import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   component: Profile,
 });
 
 function Profile() {
-  const { user } = Route.useRouteContext();
+  const auth = useAuth();
 
   return (
     <div className="p-2">
@@ -21,10 +22,10 @@ function Profile() {
                     <AvatarFallback>{data.user.given_name}</AvatarFallback>
                 </Avatar>
                 */}
-        <p>{user!.role}</p>
-        <p>{user!.firstName}</p>
-        <p>{user!.lastName}</p>
-        <p>{user!.email}</p>
+        <p>{auth.user?.role}</p>
+        <p>{auth.user?.firstName}</p>
+        <p>{auth.user?.lastName}</p>
+        <p>{auth.user?.email}</p>
       </div>
       <Button
         onClick={async () => {

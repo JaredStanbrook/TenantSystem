@@ -4,14 +4,18 @@ import { zValidator } from "@hono/zod-validator";
 import { dbMiddleware, luciaMiddleware } from "../db";
 
 import {
-  expenses as expenseTable,
+  expense as expenseTable,
   insertExpenseSchema,
   selectExpenseSchema,
-} from "../db/schema/expenses";
-import { users as userTable } from "../db/schema/users";
+} from "../db/schema/expense";
+
+import { property as propertyTable } from "../db/schema/property";
+
+import { user as userTable } from "../db/schema/user";
 import { eq, desc, sum, and } from "drizzle-orm";
 
 import { createExpenseSchema } from "../sharedTypes";
+import { userProperty as userPropertyTable } from "../db/schema/userProperty";
 
 export const expenseRoute = new Hono<{ Bindings: Env }>()
   .use("*", dbMiddleware)
@@ -26,7 +30,7 @@ export const expenseRoute = new Hono<{ Bindings: Env }>()
         email: userTable.email,
         title: expenseTable.title,
         amount: expenseTable.amount,
-        date: expenseTable.date,
+        date: expenseTable.expenseDate,
         createdAt: expenseTable.createdAt,
       })
       .from(expenseTable)
@@ -42,13 +46,19 @@ export const expenseRoute = new Hono<{ Bindings: Env }>()
     const user = c.var.user!;
 
     try {
+      const property = await c.var.db
+        .select({ id: userPropertyTable.propertyId })
+        .from(userPropertyTable)
+        .where(eq(userPropertyTable.tenantId, user.id))
+        .limit(1);
       const validatedExpense = insertExpenseSchema.parse({
         ...expense,
         userId: user.id,
       });
       const parsedExpense = {
         ...validatedExpense,
-        amount: parseFloat(validatedExpense.amount), // Ensure amount is a number
+        amount: parseFloat(validatedExpense.amount),
+        propertyId: property[0].id,
       };
 
       const result = await c.var.db

@@ -8,18 +8,42 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { createFileRoute } from "@tanstack/react-router";
-import { loadingCreateUserQueryOptions, getAllUserQueryOptions, deleteUser } from "@/lib/authApi";
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import { loadingCreateUserQueryOptions, getAllUserQueryOptions, deleteUser } from "@/api/authApi";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Trash } from "lucide-react";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/_authenticated/_admin/admin")({
-  component: Admin,
+export const Route = createFileRoute("/admin/")({
+  beforeLoad: async ({ context, location }) => {
+    let shouldRedirect = false;
+
+    if (context.auth.status === "PENDING") {
+      const data = await context.auth.ensureData();
+
+      if (!data || data?.role !== "landlord") {
+        shouldRedirect = true;
+      }
+    }
+
+    if (context.auth.status === "UNAUTHENTICATED") {
+      shouldRedirect = true;
+    }
+
+    if (shouldRedirect) {
+      throw redirect({
+        to: "/login",
+        search: {
+          redirect: location.href,
+        },
+      });
+    }
+  },
+  component: Index,
 });
 
-function Admin() {
+function Index() {
   const { isPending, error, data } = useQuery(getAllUserQueryOptions);
   const { data: loadingCreateUser } = useQuery(loadingCreateUserQueryOptions);
 
@@ -34,7 +58,7 @@ function Admin() {
             <TableHead className="w-[100px]">Id</TableHead>
             <TableHead>Title</TableHead>
             <TableHead>Amount</TableHead>
-            <TableHead>Date</TableHead>
+            <TableHead>Email</TableHead>
             <TableHead>Delete</TableHead>
           </TableRow>
         </TableHeader>
@@ -78,6 +102,7 @@ function Admin() {
                   <TableCell className="font-medium">{user.id}</TableCell>
                   <TableCell>{user.firstName}</TableCell>
                   <TableCell>{user.lastName}</TableCell>
+                  <TableCell>{user.email}</TableCell>
                   <TableCell>
                     <UserDeleteButton id={user.id} />
                   </TableCell>

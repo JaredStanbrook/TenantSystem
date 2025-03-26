@@ -1,21 +1,21 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, useLocation } from "@tanstack/react-router";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useForm } from "@tanstack/react-form";
-import { loginUser, loadingLoginUserQueryOptions } from "@/lib/authApi";
-import { useQueryClient } from "@tanstack/react-query";
 import { zodValidator } from "@tanstack/zod-form-adapter";
 import { createUserSchema } from "@server/sharedTypes";
+import { useLoginMutation } from "@/api/auth-mutation";
 
-export const Route = createFileRoute("/login")({
+export const Route = createFileRoute("/_auth/login")({
   component: Login,
 });
 
 function Login() {
-  const queryClient = useQueryClient();
+  const userMutation = useLoginMutation();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const form = useForm({
     validatorAdapter: zodValidator(),
@@ -24,26 +24,17 @@ function Login() {
       password: "",
     },
     onSubmit: async ({ value }) => {
-      // Set loading state
-      queryClient.setQueryData(loadingLoginUserQueryOptions.queryKey, {
-        user: value,
-      });
-      console.log(value);
       try {
-        await loginUser(value);
+        await userMutation.mutateAsync(value);
+
+        const redirectUrl = new URLSearchParams(location.search).get("redirect") || "/";
+        navigate({ to: redirectUrl, replace: true });
 
         toast("Login Successful", {
           description: `Welcome back, ${value.email}!`,
         });
-
-        queryClient.invalidateQueries({ queryKey: ["get-current-user"] });
-
-        navigate({ to: "/" });
       } catch (error) {
         toast("Error", { description: "Invalid email or password" });
-      } finally {
-        // Reset loading state
-        queryClient.setQueryData(loadingLoginUserQueryOptions.queryKey, {});
       }
     },
   });

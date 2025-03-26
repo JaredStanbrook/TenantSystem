@@ -3,8 +3,8 @@ import { drizzle } from "drizzle-orm/d1";
 import { DrizzleSQLiteAdapter } from "@lucia-auth/adapter-drizzle";
 import { verifyRequestOrigin, Lucia } from "lucia";
 import type { User, Session } from "lucia";
-import { users as userTable } from "./schema/users.ts";
-import { sessions as sessionTable } from "./schema/sessions.ts";
+import { user as userTable } from "./schema/user.ts";
+import { session as sessionTable } from "./schema/session.ts";
 import { getCookie } from "hono/cookie";
 
 export type CustomContext = {

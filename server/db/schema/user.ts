@@ -2,7 +2,7 @@ import { integer, text, sqliteTable } from "drizzle-orm/sqlite-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = sqliteTable("users", {
+export const user = sqliteTable("user", {
   id: text("id").primaryKey(),
   email: text("email").notNull().unique(),
   password: text("password").notNull(),
@@ -14,7 +14,7 @@ export const users = sqliteTable("users", {
 });
 
 // Schema for inserting a user - can be used to validate API requests
-export const insertUserSchema = createInsertSchema(users, {
+export const insertUserSchema = createInsertSchema(user, {
   id: z.string(),
   firstName: z.string().min(1),
   lastName: z.string().min(1),
@@ -24,4 +24,4 @@ export const insertUserSchema = createInsertSchema(users, {
 });
 
 // Schema for selecting a user - can be used to validate API responses
-export const selectUserSchema = createSelectSchema(users);
+export const selectUserSchema = createSelectSchema(user);

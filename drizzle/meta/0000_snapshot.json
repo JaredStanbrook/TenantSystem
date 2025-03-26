@@ -1,11 +1,11 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "a7b31ee0-0408-48ef-8353-c0ebd34c40a5",
-  "prevId": "cc16c714-3f33-4d8e-9c01-5ebdbbc02f79",
+  "id": "9419ce44-8b83-436e-997a-d33d1285136c",
+  "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
-    "expenses": {
-      "name": "expenses",
+    "expense": {
+      "name": "expense",
       "columns": {
         "id": {
           "name": "id",
@@ -49,8 +49,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "date": {
-          "name": "date",
+        "expense_date": {
+          "name": "expense_date",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -67,10 +67,10 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "expenses_user_id_users_id_fk": {
-          "name": "expenses_user_id_users_id_fk",
-          "tableFrom": "expenses",
-          "tableTo": "users",
+        "expense_user_id_user_id_fk": {
+          "name": "expense_user_id_user_id_fk",
+          "tableFrom": "expense",
+          "tableTo": "user",
           "columnsFrom": [
             "user_id"
           ],
@@ -80,10 +80,10 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "expenses_property_id_properties_id_fk": {
-          "name": "expenses_property_id_properties_id_fk",
-          "tableFrom": "expenses",
-          "tableTo": "properties",
+        "expense_property_id_property_id_fk": {
+          "name": "expense_property_id_property_id_fk",
+          "tableFrom": "expense",
+          "tableTo": "property",
           "columnsFrom": [
             "property_id"
           ],
@@ -98,8 +98,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "sessions": {
-      "name": "sessions",
+    "session": {
+      "name": "session",
       "columns": {
         "id": {
           "name": "id",
@@ -125,10 +125,10 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "sessions_user_id_users_id_fk": {
-          "name": "sessions_user_id_users_id_fk",
-          "tableFrom": "sessions",
-          "tableTo": "users",
+        "session_user_id_user_id_fk": {
+          "name": "session_user_id_user_id_fk",
+          "tableFrom": "session",
+          "tableTo": "user",
           "columnsFrom": [
             "user_id"
           ],
@@ -143,8 +143,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "bills": {
-      "name": "bills",
+    "bill": {
+      "name": "bill",
       "columns": {
         "id": {
           "name": "id",
@@ -182,8 +182,8 @@
           "notNull": false,
           "autoincrement": false
         },
-        "date": {
-          "name": "date",
+        "date_due": {
+          "name": "date_due",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -204,8 +204,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "users": {
-      "name": "users",
+    "user": {
+      "name": "user",
       "columns": {
         "id": {
           "name": "id",
@@ -267,8 +267,8 @@
         }
       },
       "indexes": {
-        "users_email_unique": {
-          "name": "users_email_unique",
+        "user_email_unique": {
+          "name": "user_email_unique",
           "columns": [
             "email"
           ],
@@ -280,8 +280,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "properties": {
-      "name": "properties",
+    "property": {
+      "name": "property",
       "columns": {
         "id": {
           "name": "id",
@@ -307,10 +307,10 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "properties_landlord_id_users_id_fk": {
-          "name": "properties_landlord_id_users_id_fk",
-          "tableFrom": "properties",
-          "tableTo": "users",
+        "property_landlord_id_user_id_fk": {
+          "name": "property_landlord_id_user_id_fk",
+          "tableFrom": "property",
+          "tableTo": "user",
           "columnsFrom": [
             "landlord_id"
           ],
@@ -325,11 +325,11 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "tenantProperties": {
-      "name": "tenantProperties",
+    "user_property": {
+      "name": "user_property",
       "columns": {
-        "tenant_id": {
-          "name": "tenant_id",
+        "user_id": {
+          "name": "user_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -337,7 +337,7 @@
         },
         "property_id": {
           "name": "property_id",
-          "type": "text",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -345,12 +345,12 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "tenantProperties_tenant_id_users_id_fk": {
-          "name": "tenantProperties_tenant_id_users_id_fk",
-          "tableFrom": "tenantProperties",
-          "tableTo": "users",
+        "user_property_user_id_user_id_fk": {
+          "name": "user_property_user_id_user_id_fk",
+          "tableFrom": "user_property",
+          "tableTo": "user",
           "columnsFrom": [
-            "tenant_id"
+            "user_id"
           ],
           "columnsTo": [
             "id"
@@ -358,10 +358,10 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "tenantProperties_property_id_properties_id_fk": {
-          "name": "tenantProperties_property_id_properties_id_fk",
-          "tableFrom": "tenantProperties",
-          "tableTo": "properties",
+        "user_property_property_id_property_id_fk": {
+          "name": "user_property_property_id_property_id_fk",
+          "tableFrom": "user_property",
+          "tableTo": "property",
           "columnsFrom": [
             "property_id"
           ],

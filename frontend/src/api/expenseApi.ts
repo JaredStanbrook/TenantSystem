@@ -1,9 +1,9 @@
 import { queryOptions } from "@tanstack/react-query";
 
-import { api } from "@/lib/apiClient";
+import { api } from "@/api/apiClient";
 import { type CreateExpense } from "@server/sharedTypes";
 
-export const expense = api.expense;
+export const expense = api.expenses;
 
 export async function getAllExpense() {
   const res = await expense.$get();

@@ -6,7 +6,17 @@ import { generateId, Scrypt } from "lucia";
 import { eq, desc, sum, and } from "drizzle-orm";
 import { dbMiddleware, luciaMiddleware } from "../db";
 
-import { users as userTable, insertUserSchema, selectUserSchema } from "../db/schema/users";
+import { user as userTable, insertUserSchema, selectUserSchema } from "../db/schema/user";
+import {
+  property as propertyTable,
+  insertPropertySchema,
+  selectPropertySchema,
+} from "../db/schema/property";
+import {
+  userProperty as userPropertyTable,
+  insertUserPropertySchema,
+  selectUserPropertySchema,
+} from "../db/schema/userProperty";
 
 import { createUserSchema, authUserSchema } from "../sharedTypes";
 import { ErrorBoundary } from "hono/jsx";
@@ -33,7 +43,9 @@ export const authRoute = new Hono<{ Bindings: Env }>()
   .get("/me", async (c) => {
     try {
       const db = c.var.db;
+      const userId = c.var.user!.id;
 
+      // Fetch user details
       const user = await db
         .select({
           email: userTable.email,
@@ -42,21 +54,50 @@ export const authRoute = new Hono<{ Bindings: Env }>()
           role: userTable.role,
         })
         .from(userTable)
-        .where(eq(userTable.id, c.var.user!.id))
+        .where(eq(userTable.id, userId))
         .limit(1);
 
+      if (!user.length) {
+        return c.json({ error: "User not found" }, 404);
+      }
+
+      // Fetch properties where the user is a landlord
+      const landlordProperties = await db
+        .select({
+          id: propertyTable.id,
+          address: propertyTable.address,
+        })
+        .from(propertyTable)
+        .where(eq(propertyTable.landlordId, userId));
+
+      // Fetch properties where the user is a tenant
+      const tenantProperties = await db
+        .select({
+          id: propertyTable.id,
+          address: propertyTable.address,
+        })
+        .from(propertyTable)
+        .innerJoin(userPropertyTable, eq(propertyTable.id, userPropertyTable.propertyId))
+        .where(eq(userPropertyTable.userId, userId));
+
+      // Parse user details
       const parsedUser = authUserSchema.parse(user[0]);
-      return c.json(parsedUser);
+
+      return c.json({
+        ...parsedUser,
+        landlordProperties,
+        tenantProperties,
+      });
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return c.json({ error: "I don't know you!", details: error.errors }, 401);
+        return c.json({ error: "Invalid data", details: error.errors }, 401);
       } else {
-        return c.json({ error: "Whoops" }, 401);
+        return c.json({ error: "Something went wrong" }, 500);
       }
     }
   })
   .post("/signup", zValidator("json", createUserSchema), async (c) => {
-    const { email, password, firstName, lastName, role } = c.req.valid("json");
+    const { email, password, firstName, lastName, role, address } = c.req.valid("json");
     const lucia = c.var.lucia!;
 
     const hashedPassword = await new Scrypt().hash(password);
@@ -77,9 +118,28 @@ export const authRoute = new Hono<{ Bindings: Env }>()
         .returning()
         .then((res) => res[0]);
 
-      console.log("New user");
-      console.log(validatedUser);
+      if (role == "tenant") {
+        // Find an existing property with the given address
+        const [property] = await c.var.db
+          .select({ id: propertyTable.id })
+          .from(propertyTable)
+          .where(eq(propertyTable.address, address))
+          .limit(1);
 
+        if (!property) {
+          return c.json({ message: "Property not found", code: "PROPERTY_NOT_FOUND" }, 400);
+        }
+
+        // Link user to the property in user_property table
+        await c.var.db.insert(userPropertyTable).values({
+          userId,
+          propertyId: property.id,
+        });
+
+        console.log("New user created and linked to existing property", validatedUser, property);
+      } else {
+        console.log("New user created!", validatedUser);
+      }
       const session = await lucia.createSession(userId, {});
       const sessionCookie = lucia.createSessionCookie(session.id);
       c.header("Set-Cookie", sessionCookie.serialize(), {
