@@ -8,7 +8,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { loadingCreateUserQueryOptions, getAllUserQueryOptions, deleteUser } from "@/api/authApi";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -16,30 +16,6 @@ import { Trash } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/admin/")({
-  beforeLoad: async ({ context, location }) => {
-    let shouldRedirect = false;
-
-    if (context.auth.status === "PENDING") {
-      const data = await context.auth.ensureData();
-
-      if (!data || data?.role !== "landlord") {
-        shouldRedirect = true;
-      }
-    }
-
-    if (context.auth.status === "UNAUTHENTICATED") {
-      shouldRedirect = true;
-    }
-
-    if (shouldRedirect) {
-      throw redirect({
-        to: "/login",
-        search: {
-          redirect: location.href,
-        },
-      });
-    }
-  },
   component: Index,
 });
 

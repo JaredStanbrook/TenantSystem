@@ -17,10 +17,6 @@ type NavigationItem = {
 
 const defaultMenu: NavigationItem[] = [
   {
-    to: "/",
-    name: "Home",
-  },
-  {
     to: "/about",
     name: "About",
   },
