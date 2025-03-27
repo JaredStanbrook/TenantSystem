@@ -1,0 +1,12 @@
+{
+  "name": "Hono Bun Development Container",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": ["bradlc.vscode-tailwindcss", "esbenp.prettier-vscode"]
+    },
+    "postCreateCommand": "bun install"
+  }
+}
