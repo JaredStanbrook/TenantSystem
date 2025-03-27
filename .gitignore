@@ -175,5 +175,7 @@ dist
 .DS_Store
 
 # Cloudflare
-wrangler*
+.wrangler*
 bun.lock.d
+wrangler.toml
+worker-configuration.d.ts

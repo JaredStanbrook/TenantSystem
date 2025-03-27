@@ -12,7 +12,9 @@ const app = new Hono<{ Bindings: Env }>()
   .use(
     cors({
       origin: "*",
+      allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
       allowHeaders: ["Authorization", "Content-Type"],
+      credentials: true,
     })
   )
   .basePath("/api")

@@ -44,7 +44,7 @@ export const luciaMiddleware = createMiddleware<{
 
   c.set("lucia", lucia);
 
-  if (c.req.method !== "GET") {
+  if (c.req.method !== "GET" && c.env.ENVIRONMENT !== "dev") {
     const originHeader = c.req.header("Origin");
     const hostHeader = c.req.header("Host");
     if (!originHeader || !hostHeader || !verifyRequestOrigin(originHeader, [hostHeader])) {

@@ -19,7 +19,6 @@ import {
 } from "../db/schema/userProperty";
 
 import { createUserSchema, authUserSchema } from "../sharedTypes";
-import { ErrorBoundary } from "hono/jsx";
 
 export const authRoute = new Hono<{ Bindings: Env }>()
   .use("*", dbMiddleware)
