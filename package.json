@@ -7,10 +7,13 @@
     "dev:frontend": "cd frontend && bun run dev",
     "start": "bunx wrangler dev",
     "dev": "bunx wrangler dev --live-reload",
+    "build": "bunx drizzle-kit generate && cd frontend && bun run build",
     "local": "bunx drizzle-kit generate && bunx wrangler d1 migrations apply sheoak_ct",
     "migrate": "bunx wrangler d1 migrations apply sheoak_ct",
     "gen-schema": "bunx drizzle-kit generate",
-    "gen-types": "bunx wrangler types"
+    "gen-types": "bunx wrangler types",
+    "pre-deploy": "bunx wrangler d1 migrations apply sheoak_ct --remote",
+    "deploy": "bunx run pre-deploy && wrangler deploy --env production"
   },
   "devDependencies": {
     "@eslint/js": "^9.23.0",
