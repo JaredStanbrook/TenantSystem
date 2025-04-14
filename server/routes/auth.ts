@@ -4,7 +4,7 @@ import { z } from "zod";
 import { generateId, Scrypt } from "lucia";
 
 import { eq, desc, sum, and } from "drizzle-orm";
-import { dbMiddleware, luciaMiddleware } from "../db";
+import { dbMiddleware, luciaMiddleware, userMiddleware } from "../db";
 
 import { user as userTable, insertUserSchema, selectUserSchema } from "../db/schema/user";
 import {
@@ -23,78 +23,6 @@ import { createUserSchema, authUserSchema } from "../sharedTypes";
 export const authRoute = new Hono<{ Bindings: Env }>()
   .use("*", dbMiddleware)
   .use("*", luciaMiddleware)
-  .get("/", async (c) => {
-    const db = c.var.db;
-
-    const user = await db
-      .select({
-        id: userTable.id,
-        email: userTable.email,
-        firstName: userTable.firstName,
-        lastName: userTable.lastName,
-      })
-      .from(userTable)
-      .orderBy(desc(userTable.firstName))
-      .limit(100);
-
-    return c.json({ user });
-  })
-  .get("/me", async (c) => {
-    try {
-      const db = c.var.db;
-      const userId = c.var.user!.id;
-
-      // Fetch user details
-      const user = await db
-        .select({
-          email: userTable.email,
-          firstName: userTable.firstName,
-          lastName: userTable.lastName,
-          role: userTable.role,
-        })
-        .from(userTable)
-        .where(eq(userTable.id, userId))
-        .limit(1);
-
-      if (!user.length) {
-        return c.json({ error: "User not found" }, 404);
-      }
-
-      // Fetch properties where the user is a landlord
-      const landlordProperties = await db
-        .select({
-          id: propertyTable.id,
-          address: propertyTable.address,
-        })
-        .from(propertyTable)
-        .where(eq(propertyTable.landlordId, userId));
-
-      // Fetch properties where the user is a tenant
-      const tenantProperties = await db
-        .select({
-          id: propertyTable.id,
-          address: propertyTable.address,
-        })
-        .from(propertyTable)
-        .innerJoin(userPropertyTable, eq(propertyTable.id, userPropertyTable.propertyId))
-        .where(eq(userPropertyTable.userId, userId));
-
-      // Parse user details
-      const parsedUser = authUserSchema.parse(user[0]);
-
-      return c.json({
-        ...parsedUser,
-        landlordProperties,
-        tenantProperties,
-      });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return c.json({ error: "Invalid data", details: error.errors }, 401);
-      } else {
-        return c.json({ error: "Something went wrong" }, 500);
-      }
-    }
-  })
   .post("/signup", zValidator("json", createUserSchema), async (c) => {
     const { email, password, firstName, lastName, role, address } = c.req.valid("json");
     const lucia = c.var.lucia!;
@@ -122,7 +50,7 @@ export const authRoute = new Hono<{ Bindings: Env }>()
         const [property] = await c.var.db
           .select({ id: propertyTable.id })
           .from(propertyTable)
-          .where(eq(propertyTable.address, address))
+          .where(eq(propertyTable.address, address!))
           .limit(1);
 
         if (!property) {
@@ -187,6 +115,93 @@ export const authRoute = new Hono<{ Bindings: Env }>()
       return c.redirect("/");
     }
   )
+  .use("*", userMiddleware) // Everything past here you need to be logged in
+  .get("/", async (c) => {
+    const db = c.var.db;
+
+    const users = await db
+      .select({
+        id: userTable.id,
+        email: userTable.email,
+        firstName: userTable.firstName,
+        lastName: userTable.lastName,
+        address: propertyTable.address,
+      })
+      .from(userTable)
+      .leftJoin(userPropertyTable, eq(userTable.id, userPropertyTable.userId))
+      .leftJoin(propertyTable, eq(userPropertyTable.propertyId, propertyTable.id))
+      .orderBy(desc(userTable.firstName))
+      .limit(100);
+
+    return c.json({ users });
+  })
+  .get("/me", async (c) => {
+    try {
+      const db = c.var.db;
+      const user = c.var.user!;
+
+      // Fetch properties where the user is a landlord
+      let properties: { id: number; address: string }[] = [];
+      if (user.role == "landlord") {
+        properties = await db
+          .select({
+            id: propertyTable.id,
+            address: propertyTable.address,
+          })
+          .from(propertyTable)
+          .where(eq(propertyTable.landlordId, user.id));
+      }
+      // Fetch properties where the user is a tenant
+      if (user.role == "tenant") {
+        properties = await db
+          .select({
+            id: propertyTable.id,
+            address: propertyTable.address,
+          })
+          .from(propertyTable)
+          .innerJoin(userPropertyTable, eq(propertyTable.id, userPropertyTable.propertyId))
+          .where(eq(userPropertyTable.userId, user.id));
+      }
+      // Parse user details
+      const parsedUser = authUserSchema.parse(user);
+
+      return c.json({
+        ...parsedUser,
+        properties,
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return c.json({ error: "Invalid data", details: error.errors }, 401);
+      } else {
+        return c.json({ error: "I don't know you" }, 401);
+      }
+    }
+  })
+  .get("/tenants", async (c) => {
+    const db = c.var.db;
+    const user = c.var.user!;
+
+    if (user.role !== "landlord") {
+      return c.json({ error: "Forbidden. Only landlords can access tenant information." }, 403);
+    }
+
+    const tenants = await db
+      .select({
+        id: userTable.id,
+        email: userTable.email,
+        firstName: userTable.firstName,
+        lastName: userTable.lastName,
+        address: propertyTable.address,
+      })
+      .from(userTable)
+      .innerJoin(userPropertyTable, eq(userPropertyTable.userId, userTable.id))
+      .innerJoin(propertyTable, eq(userPropertyTable.propertyId, propertyTable.id))
+      .where(and(eq(propertyTable.landlordId, user.id), eq(userTable.role, "tenant")));
+
+    console.log(user.id);
+    return c.json({ tenants });
+  })
+
   .post("/logout", async (c) => {
     const lucia = c.var.lucia!;
 

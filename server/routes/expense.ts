@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 
-import { dbMiddleware, luciaMiddleware } from "../db";
+import { dbMiddleware, luciaMiddleware, userMiddleware } from "../db";
 
 import {
   expense as expenseTable,
@@ -20,8 +20,8 @@ import { userProperty as userPropertyTable } from "../db/schema/userProperty";
 export const expenseRoute = new Hono<{ Bindings: Env }>()
   .use("*", dbMiddleware)
   .use("*", luciaMiddleware)
+  .use("*", userMiddleware)
   .get("/", async (c) => {
-    const user = c.var.user!;
     const db = c.var.db;
 
     const expense = await db
@@ -49,7 +49,7 @@ export const expenseRoute = new Hono<{ Bindings: Env }>()
       const property = await c.var.db
         .select({ id: userPropertyTable.propertyId })
         .from(userPropertyTable)
-        .where(eq(userPropertyTable.tenantId, user.id))
+        .where(eq(userPropertyTable.userId, user.id))
         .limit(1);
       const validatedExpense = insertExpenseSchema.parse({
         ...expense,

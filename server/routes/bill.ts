@@ -1,101 +1,171 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 
-import { dbMiddleware, luciaMiddleware } from "../db";
+import { dbMiddleware, luciaMiddleware, userMiddleware } from "../db";
 
 import { bill as billTable, insertBillSchema, selectBillSchema } from "../db/schema/bill";
-import { user as userTable } from "../db/schema/user";
-import { eq, desc, sum, and } from "drizzle-orm";
+import { userBill as userBillTable } from "../db/schema/userBill";
+import { eq, desc, sum, and, isNull, lt, asc } from "drizzle-orm";
 
 import { createBillSchema } from "../sharedTypes";
 
 export const billRoute = new Hono<{ Bindings: Env }>()
   .use("*", dbMiddleware)
   .use("*", luciaMiddleware)
+  .use("*", userMiddleware)
   .get("/", async (c) => {
+    const db = c.var.db;
+    const user = c.var.user!;
+
+    const billSelect = {
+      id: billTable.id,
+      title: billTable.title,
+      amount: billTable.amount,
+      dueDate: billTable.dueDate,
+      createdAt: billTable.createdAt,
+    };
+
+    let bills;
+
+    if (user.role === "landlord") {
+      bills = await db
+        .select(billSelect)
+        .from(billTable)
+        .where(eq(billTable.landlordId, user.id))
+        .orderBy(desc(billTable.createdAt))
+        .limit(100);
+    } else {
+      bills = await db
+        .select(billSelect)
+        .from(userBillTable)
+        .innerJoin(billTable, eq(userBillTable.billId, billTable.id))
+        .where(eq(userBillTable.userId, user.id))
+        .orderBy(desc(billTable.createdAt))
+        .limit(100);
+    }
+
+    return c.json({ bills });
+  })
+  .post("/", zValidator("json", createBillSchema), async (c) => {
     const user = c.var.user!;
     const db = c.var.db;
 
-    const bill = await db
-      .select({
-        id: billTable.id,
-        email: userTable.email,
-        title: billTable.title,
-        amount: billTable.amount,
-        date: billTable.dueDate,
-        createdAt: billTable.createdAt,
-      })
-      .from(billTable)
-      .innerJoin(userTable, eq(billTable, userTable.id)) // Join user table
-      //.where(eq(billTable.userId, user.id))
-      .orderBy(desc(billTable.createdAt))
-      .limit(100);
+    if (user.role !== "landlord") {
+      return c.json({ error: "Only landlords can create bills" }, 403);
+    }
 
-    return c.json({ bill });
-  })
-  .post("/", zValidator("json", createBillSchema), async (c) => {
     const bill = await c.req.valid("json");
-    const user = c.var.user!;
 
     const validatedBill = insertBillSchema.parse({
       ...bill,
-      userId: user.id,
+      landlordId: user.id,
     });
-    const parsedBill = {
-      ...validatedBill,
-      amount: parseFloat(validatedBill.amount), // Ensure amount is a number
-    };
 
-    const result = await c.var.db
+    const newBill = await db
       .insert(billTable)
-      .values(parsedBill)
+      .values({
+        ...validatedBill,
+        amount: parseFloat(validatedBill.amount),
+      })
       .returning()
       .then((res) => res[0]);
 
+    // Insert user_bill entries for all assigned tenant IDs
+    if (Array.isArray(bill.tenantIds)) {
+      const entries = bill.tenantIds.map((tenantId: string) => ({
+        userId: tenantId,
+        billId: newBill.id,
+      }));
+
+      await db.insert(userBillTable).values(entries);
+    }
+
     c.status(201);
-    return c.json(result);
-  });
-/*
+    return c.json(newBill);
+  })
   .get("/total-owed", async (c) => {
     const user = c.var.user!;
-    const result = await c.var.db
+    const db = c.var.db;
+
+    if (user.role !== "tenant") return c.json({ total: 0 });
+
+    const total = await db
       .select({ total: sum(billTable.amount) })
-      .from(billTable)
-      .where(eq(billTable.userId, user.id))
-      .limit(1)
-      .then((res) => res[0]);
-    return c.json(result);
+      .from(userBillTable)
+      .innerJoin(billTable, eq(userBillTable.billId, billTable.id))
+      .where(eq(userBillTable.userId, user.id))
+      .then((res) => res[0]?.total ?? 0);
+
+    return c.json({ total });
+  })
+  .get("/overdue-bills", async (c) => {
+    const user = c.var.user!;
+    const db = c.var.db;
+
+    // Only tenants can have overdue bills
+    if (user.role !== "tenant") return c.json({ bills: [] });
+
+    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
+
+    const overdueBills = await db
+      .select({
+        id: billTable.id,
+        type: billTable.type,
+        title: billTable.title,
+        amount: billTable.amount,
+        dateDue: billTable.dueDate,
+        description: billTable.description,
+      })
+      .from(userBillTable)
+      .innerJoin(billTable, eq(userBillTable.billId, billTable.id))
+      .where(
+        and(
+          eq(userBillTable.userId, user.id),
+          lt(billTable.dueDate, today) // Only bills where due date has passed
+        )
+      )
+      .orderBy(asc(billTable.dueDate)); // Oldest overdue first
+
+    return c.json({ bills: overdueBills });
   })
   .get("/:id{[0-9]+}", async (c) => {
-    const id = Number.parseInt(c.req.param("id"));
     const user = c.var.user!;
+    const id = Number.parseInt(c.req.param("id"));
 
-    const bill = await c.var.db
-      .select()
-      .from(billTable)
-      .where(and(eq(billTable.userId, user.id), eq(billTable.id, id)))
-      .then((res) => res[0]);
+    let bill;
 
-    if (!bill) {
-      return c.notFound();
+    if (user.role === "landlord") {
+      bill = await c.var.db
+        .select()
+        .from(billTable)
+        .where(and(eq(billTable.id, id), eq(billTable.landlordId, user.id)))
+        .then((res) => res[0]);
+    } else {
+      bill = await c.var.db
+        .select()
+        .from(userBillTable)
+        .innerJoin(billTable, eq(userBillTable.billId, billTable.id))
+        .where(and(eq(userBillTable.userId, user.id), eq(userBillTable.billId, id)))
+        .then((res) => res[0]?.bill);
     }
+
+    if (!bill) return c.notFound();
 
     return c.json({ bill });
   })
   .delete("/:id{[0-9]+}", async (c) => {
-    const id = Number.parseInt(c.req.param("id"));
     const user = c.var.user!;
+    const id = Number.parseInt(c.req.param("id"));
 
-    const bill = await c.var.db
+    if (user.role !== "landlord") return c.json({ error: "Only landlords can delete bills" }, 403);
+
+    const deleted = await c.var.db
       .delete(billTable)
-      .where(and(eq(billTable.userId, user.id), eq(billTable.id, id)))
+      .where(and(eq(billTable.id, id), eq(billTable.landlordId, user.id)))
       .returning()
       .then((res) => res[0]);
 
-    if (!bill) {
-      return c.notFound();
-    }
+    if (!deleted) return c.notFound();
 
-    return c.json({ bill: bill });
+    return c.json({ bill: deleted });
   });
-  */

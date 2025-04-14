@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 
-import { dbMiddleware, luciaMiddleware } from "../db";
+import { dbMiddleware, luciaMiddleware, userMiddleware } from "../db";
 
 import {
   property as propertyTable,
@@ -17,6 +17,7 @@ import { eq, desc, sum, and } from "drizzle-orm";
 export const propertyRoute = new Hono<{ Bindings: Env }>()
   .use("*", dbMiddleware)
   .use("*", luciaMiddleware)
+  .use("*", userMiddleware)
   .get("/", async (c) => {
     const user = c.var.user!;
     const db = c.var.db;

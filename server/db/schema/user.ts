@@ -25,3 +25,7 @@ export const insertUserSchema = createInsertSchema(user, {
 
 // Schema for selecting a user - can be used to validate API responses
 export const selectUserSchema = createSelectSchema(user);
+export type User = Pick<
+  z.infer<typeof selectUserSchema>,
+  "id" | "email" | "firstName" | "lastName" | "role"
+>;

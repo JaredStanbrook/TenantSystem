@@ -6,6 +6,7 @@ import { expenseRoute } from "./routes/expense";
 import { billRoute } from "./routes/bill";
 import { authRoute } from "./routes/auth";
 import { propertyRoute } from "./routes/property";
+import { HTTPException } from "hono/http-exception";
 
 const app = new Hono<{ Bindings: Env }>()
   .use("*", logger())
@@ -31,10 +32,15 @@ const app = new Hono<{ Bindings: Env }>()
       return c.env.ASSETS.fetch(c.req.raw);
     }
   });
-app.onError((err, c) => {
-  console.error(err);
-  return c.json({ error: "Internal Server Error" }, 500);
+
+app.onError((err) => {
+  if (err instanceof HTTPException) {
+    return err.getResponse();
+  } else {
+    return new Response("Internal Server Error", { status: 500 });
+  }
 });
+
 app.notFound((c) => {
   return c.env.ASSETS.fetch(c.req.raw);
 });

@@ -4,13 +4,17 @@ import { DrizzleSQLiteAdapter } from "@lucia-auth/adapter-drizzle";
 import { verifyRequestOrigin, Lucia } from "lucia";
 import type { User, Session } from "lucia";
 import { user as userTable } from "./schema/user.ts";
+
 import { session as sessionTable } from "./schema/session.ts";
 import { getCookie } from "hono/cookie";
+import { eq } from "drizzle-orm";
+import type { User as LuciaUser } from "./schema/user.ts";
+import { HTTPException } from "hono/http-exception";
 
 export type CustomContext = {
   db: ReturnType<typeof drizzle>;
   lucia?: Lucia;
-  user: User | null;
+  user: LuciaUser | null;
   session: Session | null;
 };
 
@@ -43,12 +47,25 @@ export const luciaMiddleware = createMiddleware<{
   });
 
   c.set("lucia", lucia);
+  await next();
+});
+
+export const userMiddleware = createMiddleware<{
+  Bindings: Env;
+  Variables: CustomContext;
+}>(async (c, next) => {
+  const db = c.get("db");
+  const lucia = c.get("lucia");
+
+  if (!lucia) {
+    throw new HTTPException(500, { message: "Lucia not initialized" });
+  }
 
   if (c.req.method !== "GET" && c.env.ENVIRONMENT !== "dev") {
     const originHeader = c.req.header("Origin");
     const hostHeader = c.req.header("Host");
     if (!originHeader || !hostHeader || !verifyRequestOrigin(originHeader, [hostHeader])) {
-      return c.body(null, 403);
+      throw new HTTPException(403, { message: "Forbidden" });
     }
   }
 
@@ -56,7 +73,7 @@ export const luciaMiddleware = createMiddleware<{
   if (!sessionId) {
     c.set("user", null);
     c.set("session", null);
-    return next();
+    throw new HTTPException(401, { message: "Unauthorized" });
   }
   const { session, user } = await lucia.validateSession(sessionId);
   if (session && session.fresh) {
@@ -70,7 +87,23 @@ export const luciaMiddleware = createMiddleware<{
       append: true,
     });
   }
-  c.set("user", user);
+
+  const [dbUser] = await db
+    .select({
+      email: userTable.email,
+      firstName: userTable.firstName,
+      lastName: userTable.lastName,
+      role: userTable.role,
+    })
+    .from(userTable)
+    .where(eq(userTable.id, user!.id))
+    .limit(1);
+
+  if (!dbUser) {
+    throw new HTTPException(403, { message: "Forbidden" });
+  }
+
+  c.set("user", { id: user!.id, ...dbUser });
   c.set("session", session);
 
   await next();
