@@ -1,6 +1,7 @@
 import { queryOptions } from "@tanstack/react-query";
 import { api } from "@/api/apiClient";
 import { type CreateProperty } from "@server/sharedTypes";
+import { handleResponseError } from "@/lib/utils";
 
 export const property = api.properties;
 
@@ -53,7 +54,5 @@ export async function deleteProperty({ id }: { id: number }) {
     param: { id: id.toString() },
   });
 
-  if (!res.ok) {
-    throw new Error("server error");
-  }
+  await handleResponseError(res);
 }

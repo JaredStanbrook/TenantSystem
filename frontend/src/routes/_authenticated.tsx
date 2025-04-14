@@ -1,22 +1,15 @@
+import { getUserQueryOptions, logoutUser } from "@/api/authApi";
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_authenticated")({
   beforeLoad: async ({ context, location }) => {
-    let shouldRedirect = false;
+    const queryClient = context.queryClient;
 
-    if (context.auth.status === "PENDING") {
-      const data = await context.auth.ensureData();
+    const data = await queryClient.ensureQueryData(getUserQueryOptions);
 
-      if (!data || data?.role !== "tenant") {
-        shouldRedirect = true;
-      }
-    }
-
-    if (context.auth.status === "UNAUTHENTICATED") {
-      shouldRedirect = true;
-    }
-
-    if (shouldRedirect) {
+    if (!data || data.role !== "tenant") {
+      queryClient.removeQueries(getUserQueryOptions);
+      await logoutUser();
       throw redirect({
         to: "/login",
         search: {
@@ -24,14 +17,11 @@ export const Route = createFileRoute("/_authenticated")({
         },
       });
     }
+    return { data };
   },
   component: AuthenticatedLayout,
 });
 
 function AuthenticatedLayout() {
-  return (
-    <>
-      <Outlet />
-    </>
-  );
+  return <Outlet />;
 }

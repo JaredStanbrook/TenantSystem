@@ -1,15 +1,24 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { logoutUser } from "@/api/authApi";
+import { getUserQueryOptions, logoutUser, useLogoutMutation } from "@/api/authApi";
 //import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/hooks/use-auth";
+import { useSuspenseQuery } from "@tanstack/react-query";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   component: Profile,
 });
 
 function Profile() {
-  const auth = useAuth();
+  const { isPending, error, data } = useSuspenseQuery(getUserQueryOptions);
+
+  if (isPending) return "loading";
+  if (error) return "not logged in";
+
+  const logoutMutation = useLogoutMutation();
+
+  const handleLogout = () => {
+    logoutMutation.mutate();
+  };
 
   return (
     <div className="p-2">
@@ -22,23 +31,14 @@ function Profile() {
                     <AvatarFallback>{data.user.given_name}</AvatarFallback>
                 </Avatar>
                 */}
-        <p>{auth.user?.role}</p>
-        <p>{auth.user?.firstName}</p>
-        <p>{auth.user?.lastName}</p>
-        <p>{auth.user?.email}</p>
+        <p>{data.role}</p>
+        <p>{data.firstName}</p>
+        <p>{data.lastName}</p>
+        <p>{data.email}</p>
       </div>
-      <Button
-        onClick={async () => {
-          try {
-            await logoutUser();
-            window.location.href = "/"; // Redirect after logout
-          } catch (error) {
-            console.error("Logout failed:", error);
-          }
-        }}
-        className="my-4">
-        Logout!
-      </Button>
+      <button className="my-4" onClick={handleLogout} disabled={logoutMutation.isPending}>
+        Log out
+      </button>
     </div>
   );
 }

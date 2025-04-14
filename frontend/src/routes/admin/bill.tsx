@@ -8,51 +8,44 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { createFileRoute } from "@tanstack/react-router";
-import {
-  getAllExpenseQueryOptions,
-  loadingCreateExpenseQueryOptions,
-  deleteExpense,
-} from "@/api/expenseApi";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { getAllBillsQueryOptions, loadingCreateBillQueryOptions, deleteBill } from "@/api/billApi";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Trash } from "lucide-react";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/_authenticated/expense")({
-  component: Expense,
+export const Route = createFileRoute("/admin/bill")({
+  component: Bills,
 });
 
-function Expense() {
-  const { isPending, error, data } = useQuery(getAllExpenseQueryOptions);
-  const { data: loadingCreateExpense } = useQuery(loadingCreateExpenseQueryOptions);
+function Bills() {
+  const { isPending, error, data } = useQuery(getAllBillsQueryOptions);
+  const { data: loadingCreateBill } = useQuery(loadingCreateBillQueryOptions);
 
   if (error) return "An error has occurred: " + error.message;
 
   return (
     <div className="p-2 max-w-3xl m-auto">
       <Table>
-        <TableCaption>A list of all your expenses.</TableCaption>
+        <TableCaption>A list of all your bills.</TableCaption>
         <TableHeader>
           <TableRow>
             <TableHead className="w-[100px]">Id</TableHead>
             <TableHead>Title</TableHead>
-            <TableHead>Person</TableHead>
             <TableHead>Amount</TableHead>
-            <TableHead>Date</TableHead>
             <TableHead>Delete</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {loadingCreateExpense?.expense && (
+          {loadingCreateBill?.bill && (
             <TableRow>
               <TableCell className="font-medium">
                 <Skeleton className="h-4" />
               </TableCell>
-              <TableCell>{loadingCreateExpense?.expense.title}</TableCell>
-              <TableCell>{loadingCreateExpense?.expense.amount}</TableCell>
-              <TableCell>{loadingCreateExpense?.expense.date.split("T")[0]}</TableCell>
-              <TableCell className="font-medium">
+              <TableCell>{loadingCreateBill?.bill.title}</TableCell>
+              <TableCell>{loadingCreateBill?.bill.amount}</TableCell>
+              <TableCell>
                 <Skeleton className="h-4" />
               </TableCell>
             </TableRow>
@@ -62,9 +55,6 @@ function Expense() {
               .fill(0)
               .map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell className="font-medium">
-                    <Skeleton className="h-4" />
-                  </TableCell>
                   <TableCell>
                     <Skeleton className="h-4" />
                   </TableCell>
@@ -79,49 +69,52 @@ function Expense() {
                   </TableCell>
                 </TableRow>
               ))
-          ) : data?.expense?.length === 0 ? ( // Check if there's no expense data
+          ) : data?.bills?.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={5} className="text-center">
-                No expenses available
+              <TableCell colSpan={4} className="text-center">
+                No bills available
               </TableCell>
             </TableRow>
           ) : (
-            data?.expense.map((expense) => (
-              <TableRow key={expense.id}>
-                <TableCell className="font-medium">{expense.id}</TableCell>
-                <TableCell>{expense.title}</TableCell>
-                <TableCell>{expense.email}</TableCell>
-                <TableCell>{expense.amount}</TableCell>
-                <TableCell>{expense.date.split("T")[0]}</TableCell>
+            data?.bills.map((bill) => (
+              <TableRow key={bill.id}>
+                <TableCell className="font-medium">{bill.id}</TableCell>
+                <TableCell>{bill.title}</TableCell>
+                <TableCell>${bill.amount}</TableCell>
                 <TableCell>
-                  <ExpenseDeleteButton id={expense.id} />
+                  <BillDeleteButton id={bill.id} />
                 </TableCell>
               </TableRow>
             ))
           )}
         </TableBody>
       </Table>
+      <div className="flex justify-end">
+        <Link to="/admin/create-bill">
+          <Button>Create Bill</Button>
+        </Link>
+      </div>
     </div>
   );
 }
 
-function ExpenseDeleteButton({ id }: { id: number }) {
+function BillDeleteButton({ id }: { id: number }) {
   const queryClient = useQueryClient();
   const mutation = useMutation({
-    mutationFn: deleteExpense,
+    mutationFn: deleteBill,
     onError: () => {
       toast("Error", {
-        description: `Failed to delete expense: ${id}`,
+        description: `Failed to delete bill: ${id}`,
       });
     },
     onSuccess: () => {
-      toast("Expense Deleted", {
-        description: `Successfully deleted expense: ${id}`,
+      toast("Bill Deleted", {
+        description: `Successfully deleted bill: ${id}`,
       });
 
-      queryClient.setQueryData(getAllExpenseQueryOptions.queryKey, (existingExpense) => ({
-        ...existingExpense,
-        expense: existingExpense!.expense.filter((e) => e.id !== id),
+      queryClient.setQueryData(getAllBillsQueryOptions.queryKey, (existingBills) => ({
+        ...existingBills,
+        bills: existingBills!.bills.filter((b) => b.id !== id),
       }));
     },
   });

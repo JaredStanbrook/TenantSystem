@@ -1,17 +1,19 @@
+import { getUserQueryOptions } from "@/api/authApi";
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-
-import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/")({
   component: HomeComponent,
 });
 
 function HomeComponent() {
-  const auth = useAuth();
+  const { isPending, data } = useQuery(getUserQueryOptions);
+
+  if (isPending) return <h3>Loading...</h3>;
 
   return (
     <>
-      <h3>Welcome {auth.user?.firstName || "Guest"}!</h3>{" "}
+      <h3>Welcome {data?.firstName || "Guest"}!</h3>
     </>
   );
 }

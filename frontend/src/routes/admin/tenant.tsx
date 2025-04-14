@@ -9,35 +9,31 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { createFileRoute } from "@tanstack/react-router";
-import { getAllUserQueryOptions, deleteUser } from "@/api/authApi";
+import { deleteUser } from "@/api/authApi";
+import { getTenantsForLandlordQueryOptions } from "@/api/tenantApi";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Trash } from "lucide-react";
 import { toast } from "sonner";
-import { getOverdueBills } from "@/api/billApi";
 
-export const Route = createFileRoute("/admin/")({
+export const Route = createFileRoute("/admin/tenant")({
   component: Index,
 });
 
 function Index() {
-  const { isPending, error, data } = useQuery({
-    queryKey: ["get-overdue-bills"],
-    queryFn: getOverdueBills,
-  });
+  const { isPending, error, data } = useQuery(getTenantsForLandlordQueryOptions);
 
   if (error) return "An error has occurred: " + error.message;
 
   return (
     <div className="p-2 max-w-3xl m-auto">
       <Table>
-        <TableCaption>A list of all overdue bills.</TableCaption>
+        <TableCaption>A list of all your tenants.</TableCaption>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[100px]">Due</TableHead>
-            <TableHead>Title</TableHead>
-            <TableHead>Amount</TableHead>
-            <TableHead>Type</TableHead>
+            <TableHead>Name</TableHead>
+            <TableHead>Email</TableHead>
+            <TableHead>Address</TableHead>
             <TableHead>Delete</TableHead>
           </TableRow>
         </TableHeader>
@@ -47,9 +43,6 @@ function Index() {
                 .fill(0)
                 .map((_, i) => (
                   <TableRow key={i}>
-                    <TableCell className="font-medium">
-                      <Skeleton className="h-4" />
-                    </TableCell>
                     <TableCell>
                       <Skeleton className="h-4" />
                     </TableCell>
@@ -64,13 +57,14 @@ function Index() {
                     </TableCell>
                   </TableRow>
                 ))
-            : data?.bills.map((bill) => (
-                <TableRow key={bill.dateDue}>
-                  <TableCell className="font-medium">{bill.dateDue}</TableCell>
-                  <TableCell>{bill.title}</TableCell>
-                  <TableCell>{bill.amount}</TableCell>
-                  <TableCell>{bill.type}</TableCell>
-                  <TableCell>{/*<UserDeleteButton id={bill.id} />*/}Delete</TableCell>
+            : data?.tenants.map((user) => (
+                <TableRow key={user.firstName}>
+                  <TableCell>{`${user.firstName} ${user.lastName}`}</TableCell>
+                  <TableCell>{user.email}</TableCell>
+                  <TableCell>{user.address}</TableCell>
+                  <TableCell>
+                    <UserDeleteButton id={user.id} />
+                  </TableCell>
                 </TableRow>
               ))}
         </TableBody>
@@ -79,28 +73,26 @@ function Index() {
   );
 }
 
-/*
 function UserDeleteButton({ id }: { id: string }) {
   const queryClient = useQueryClient();
   const mutation = useMutation({
     mutationFn: deleteUser,
     onError: () => {
       toast("Error", {
-        description: `Failed to delete bill: ${id}`,
+        description: `Failed to delete user: ${id}`,
       });
     },
     onSuccess: () => {
       toast("User Deleted", {
-        description: `Successfully deleted bill: ${id}`,
+        description: `Successfully deleted user: ${id}`,
       });
 
-      queryClient.setQueryData(getAllUserQueryOptions.queryKey, (existingUser) => ({
+      queryClient.setQueryData(getTenantsForLandlordQueryOptions.queryKey, (existingUser) => ({
         ...existingUser,
-        bill: existingUser!.bill.filter((e) => e.id !== id),
+        tenants: existingUser!.tenants.filter((e) => e.id !== id),
       }));
     },
   });
-  
 
   return (
     <Button
@@ -112,4 +104,3 @@ function UserDeleteButton({ id }: { id: string }) {
     </Button>
   );
 }
-*/

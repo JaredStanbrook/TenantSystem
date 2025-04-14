@@ -4,12 +4,10 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useForm } from "@tanstack/react-form";
-import { useQueryClient } from "@tanstack/react-query";
 import { zodValidator } from "@tanstack/zod-form-adapter";
-import { createUser, loadingCreateUserQueryOptions } from "@/api/authApi";
 import { createUserSchema } from "@server/sharedTypes";
 import { useRef, useState } from "react";
-import { useCreateMutation } from "@/api/auth-mutation";
+import { useCreateUserMutation } from "@/api/authApi";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Card,
@@ -28,9 +26,9 @@ export const Route = createFileRoute("/_auth/signup")({
 });
 
 function Signup() {
-  const userMutation = useCreateMutation();
+  const userMutation = useCreateUserMutation();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("admin-account");
+  const [activeTab, setActiveTab] = useState("tenant");
 
   const pickerRef = useRef<TPlacePicker>(null);
 
@@ -41,15 +39,14 @@ function Signup() {
       lastName: "",
       email: "",
       password: "",
-      role: activeTab === "admin-account" ? "landlord" : "tenant",
+      role: activeTab === "landlord" ? "landlord" : "tenant",
       address: "",
     },
     onSubmit: async ({ value }) => {
       try {
-        // Ensure role is set based on active tab
         const submissionValue = {
           ...value,
-          role: activeTab === "admin-account" ? "landlord" : "tenant",
+          role: activeTab === "landlord" ? "landlord" : ("tenant" as "tenant" | "landlord"),
         };
 
         await userMutation.mutateAsync(submissionValue);
@@ -72,29 +69,29 @@ function Signup() {
   });
 
   return (
-    <Tabs
-      className="w-[400px] justify-center items-center min-h-screen"
-      value={activeTab}
-      onValueChange={(value) => {
-        setActiveTab(value);
-        // Reset the role when switching tabs
-        form.setFieldValue("role", value === "admin-account" ? "landlord" : "tenant");
-      }}>
-      <TabsList className="grid w-full grid-cols-2">
-        <TabsTrigger value="admin-account">Admin</TabsTrigger>
-        <TabsTrigger value="tenant-account">tenant</TabsTrigger>
-      </TabsList>
-      <TabsContent value="admin-account">
-        <Card>
-          <CardHeader className="text-2xl text-center mb-4">Create Account</CardHeader>
-          <CardContent>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                void form.handleSubmit();
-              }}
-              className="flex flex-col gap-y-4">
+    <div className="flex justify-center items-center py-8">
+      <div className="w-full max-w-3xl p-6 border rounded-lg shadow-lg">
+        <h2 className="text-2xl text-center mb-6">Create Account</h2>
+
+        <Tabs
+          defaultValue="tenant"
+          className="w-full mb-6"
+          onValueChange={(value) => {
+            setActiveTab(value);
+            form.setFieldValue("role", value === "landlord" ? "landlord" : "tenant");
+          }}>
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="landlord">Landlord</TabsTrigger>
+            <TabsTrigger value="tenant">Tenant</TabsTrigger>
+          </TabsList>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              void form.handleSubmit();
+            }}
+            className="flex flex-col gap-y-6 mt-6">
+            <TabsContent value="landlord" className="space-y-6">
               <form.Field
                 name="firstName"
                 validators={{
@@ -155,7 +152,6 @@ function Signup() {
                   </div>
                 )}
               />
-
               <form.Field
                 name="password"
                 validators={{
@@ -176,35 +172,8 @@ function Signup() {
                   </div>
                 )}
               />
-              <form.Subscribe
-                selector={(state) => [state.canSubmit, state.isSubmitting]}
-                children={([canSubmit, isSubmitting]) => (
-                  <Button className="mt-4 w-full" type="submit" disabled={!canSubmit}>
-                    {isSubmitting ? "..." : "Sign Up"}
-                  </Button>
-                )}
-              />
-            </form>
-          </CardContent>
-          <CardFooter className="text-sm text-gray-500 text-center mt-4">
-            Already have an account?{" "}
-            <Button variant="link" className="p-0" onClick={() => navigate({ to: "/login" })}>
-              Log in
-            </Button>
-          </CardFooter>
-        </Card>
-      </TabsContent>
-      <TabsContent value="tenant-account">
-        <Card>
-          <CardHeader className="text-2xl text-center mb-4">Create Account</CardHeader>
-          <CardContent>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                void form.handleSubmit();
-              }}
-              className="flex flex-col gap-y-4">
+            </TabsContent>
+            <TabsContent value="tenant" className="space-y-6">
               <form.Field
                 name="firstName"
                 validators={{
@@ -312,24 +281,24 @@ function Signup() {
                   </div>
                 )}
               />
-              <form.Subscribe
-                selector={(state) => [state.canSubmit, state.isSubmitting]}
-                children={([canSubmit, isSubmitting]) => (
-                  <Button className="mt-4 w-full" type="submit" disabled={!canSubmit}>
-                    {isSubmitting ? "..." : "Sign Up"}
-                  </Button>
-                )}
-              />
-            </form>
-          </CardContent>
-          <CardFooter className="text-sm text-gray-500 text-center mt-4">
-            Already have an account?{" "}
-            <Button variant="link" className="p-0" onClick={() => navigate({ to: "/login" })}>
-              Log in
-            </Button>
-          </CardFooter>
-        </Card>
-      </TabsContent>
-    </Tabs>
+            </TabsContent>
+            <div className="text-sm text-gray-500 text-center mt-4">
+              Already have an account?{" "}
+              <Button variant="link" className="p-0" onClick={() => navigate({ to: "/login" })}>
+                Log in
+              </Button>
+            </div>
+            <form.Subscribe
+              selector={(state) => [state.canSubmit, state.isSubmitting]}
+              children={([canSubmit, isSubmitting]) => (
+                <Button className="mt-4 w-full" type="submit" disabled={!canSubmit}>
+                  {isSubmitting ? "..." : "Sign Up"}
+                </Button>
+              )}
+            />
+          </form>
+        </Tabs>
+      </div>
+    </div>
   );
 }

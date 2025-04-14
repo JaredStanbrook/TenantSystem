@@ -1,11 +1,16 @@
 import { Link, Outlet, createRootRouteWithContext, redirect } from "@tanstack/react-router";
 import { Toaster } from "@/components/ui/sonner";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
-import { Route as Auth } from "@/routes/_authenticated";
-import type { RouterContext } from "@/lib/router";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { NavBar } from "@/components/navbar";
+import { type QueryClient } from "@tanstack/react-query";
+import { getUserQueryOptions } from "@/api/authApi";
 
-export const Route = createRootRouteWithContext<RouterContext>()({
+interface MyRouterContext {
+  queryClient: QueryClient;
+}
+
+export const Route = createRootRouteWithContext<MyRouterContext>()({
   component: Root,
 });
 
@@ -17,7 +22,8 @@ function Root() {
         <Outlet />
       </div>
       <Toaster />
-      <TanStackRouterDevtools position="bottom-right" />
+      <ReactQueryDevtools position="left" />
+      <TanStackRouterDevtools position="bottom-left" />
     </>
   );
 }

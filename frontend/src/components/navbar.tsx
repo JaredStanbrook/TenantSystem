@@ -1,6 +1,6 @@
-import { useAuth } from "@/hooks/use-auth";
-import { Link, Outlet, createRootRouteWithContext, redirect } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import type { FileRouteTypes } from "@/routeTree.gen";
+import { useQuery } from "@tanstack/react-query";
 
 import {
   Select,
@@ -9,6 +9,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { getUserQueryOptions, useLogoutMutation } from "@/api/authApi";
+import { getAllProperties, getAllPropertiesQueryOptions } from "@/api/propertyApi";
 
 type NavigationItem = {
   to: FileRouteTypes["to"];
@@ -47,23 +49,43 @@ const landlordMenu: NavigationItem[] = [
     name: "Home",
   },
   {
-    to: "/admin/property",
-    name: "Show properties",
+    to: "/admin/tenant",
+    name: "Tenants",
   },
   {
-    to: "/admin/create-property",
-    name: "Add property",
+    to: "/admin/bill",
+    name: "Bills",
+  },
+  {
+    to: "/admin/property",
+    name: "Properties",
   },
 ];
 
 export function NavBar() {
-  const auth = useAuth();
+  const {
+    isPending: isUserPending,
+    error: userError,
+    data: userData,
+  } = useQuery(getUserQueryOptions);
+
+  const {
+    isPending: isPropertiesPending,
+    error: propertiesError,
+    data: propertiesData,
+  } = useQuery(getAllPropertiesQueryOptions);
+  const logoutMutation = useLogoutMutation();
+
+  const handleLogout = () => {
+    logoutMutation.mutate();
+  };
+
   const menu =
-    auth.status === "AUTHENTICATED"
-      ? auth.user?.role === "landlord"
-        ? landlordMenu
-        : tenantMenu
-      : defaultMenu;
+    userData?.role === "landlord"
+      ? landlordMenu
+      : userData?.role === "tenant"
+        ? tenantMenu
+        : defaultMenu;
 
   return (
     <div className="p-2 flex justify-between max-w-5xl m-auto items-baseline">
@@ -71,15 +93,18 @@ export function NavBar() {
         <Link to="/">
           <h1 className="text-2xl font-bold">Tenant Tracker</h1>
         </Link>
-        {auth.user?.role === "landlord" && (
+        {userData?.role === "landlord" && (
           <Select>
             {/*onValueChange={(value) => setSelectedProperty(value)} defaultValue={selectedEmail}*/}
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Select a property" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="m@example.com">Magonolia</SelectItem>
-              <SelectItem value="m@google.com">Sheoak</SelectItem>
+              {propertiesData?.properties.map((properties) => (
+                <SelectItem key={properties.id} value={properties.id.toString()}>
+                  {properties.address}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         )}
@@ -96,9 +121,9 @@ export function NavBar() {
             </Link>
           ))}
         </div>
-        {auth.status === "PENDING" && <div>Loading...</div>}
+        {isUserPending && <div>Loading...</div>}
 
-        {auth.status === "UNAUTHENTICATED" && (
+        {userError && (
           <div className="flex gap-x-6">
             <Link to={"/signup"} activeProps={{ className: `font-bold` }}>
               {"Create Account"}
@@ -109,11 +134,13 @@ export function NavBar() {
           </div>
         )}
 
-        {auth.status === "AUTHENTICATED" && (
+        {userData && (
           <div className="flex gap-2">
-            <button onClick={auth.signOut}>Sign Out</button>
+            <button onClick={handleLogout} disabled={logoutMutation.isPending}>
+              Log out
+            </button>
             <p> | </p>
-            <div>Welcome back, {auth.user.firstName}</div>
+            <div>Welcome back, {userData?.firstName}</div>
           </div>
         )}
       </div>

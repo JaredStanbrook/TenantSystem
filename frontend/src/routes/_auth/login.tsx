@@ -6,16 +6,19 @@ import { toast } from "sonner";
 import { useForm } from "@tanstack/react-form";
 import { zodValidator } from "@tanstack/zod-form-adapter";
 import { createUserSchema } from "@server/sharedTypes";
-import { useLoginMutation } from "@/api/auth-mutation";
+import { getUserQueryOptions, useLoginMutation, useLogoutMutation } from "@/api/authApi";
+import { useQueryClient } from "@tanstack/react-query";
 
 export const Route = createFileRoute("/_auth/login")({
   component: Login,
 });
 
 function Login() {
-  const userMutation = useLoginMutation();
+  const loginMutation = useLoginMutation();
+  const logoutMutation = useLogoutMutation();
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
 
   const form = useForm({
     validatorAdapter: zodValidator(),
@@ -25,7 +28,15 @@ function Login() {
     },
     onSubmit: async ({ value }) => {
       try {
-        await userMutation.mutateAsync(value);
+        const data = queryClient.getQueryData(getUserQueryOptions.queryKey);
+
+        if (data) {
+          await logoutMutation.mutateAsync();
+        }
+
+        await loginMutation.mutateAsync(value);
+
+        // TODO: Update the cache with the latest user data using queryClient.setQueryData
 
         const redirectUrl = new URLSearchParams(location.search).get("redirect") || "/";
         navigate({ to: redirectUrl, replace: true });
@@ -42,7 +53,7 @@ function Login() {
   return (
     <div className="flex justify-center items-center min-h-screen">
       <div className="w-full max-w-md p-6 border rounded-lg shadow-lg">
-        <h2 className="text-2xl text-center mb-4">Login</h2>
+        <h2 className="text-2xl text-center mb-6">Login</h2>
         <form
           onSubmit={(e) => {
             e.preventDefault();
