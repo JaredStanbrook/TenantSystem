@@ -1,3 +1,5 @@
+// worker/schema/common.ts
+
 import { text } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 import { users } from "./auth.schema";

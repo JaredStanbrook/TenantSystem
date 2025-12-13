@@ -22,13 +22,15 @@ import { webBaitlist } from "./routes/web/waitlist";
 import type { AppEnv } from "./types";
 import { propertyRoute } from "./routes/admin/property.tsx";
 import { SafeUser } from "./schema/auth.schema.ts";
+import { invoiceRoute } from "./routes/admin/invoice.tsx";
 
 const admin = new Hono<AppEnv>();
 admin.route("/properties", propertyRoute);
 
 const app = new Hono<AppEnv>()
   .use("*", globalRenderer)
-  .route("/admin/", admin)
+  .route("/admin", admin)
+  .route("/admin/invoices", invoiceRoute)
   .route("/", webAuth)
   .get("/profile", (c) => {
     const { auth } = c.var;

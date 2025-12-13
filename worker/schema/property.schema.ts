@@ -1,3 +1,4 @@
+// worker/schema/property.schema.ts
 import { integer, text, sqliteTable } from "drizzle-orm/sqlite-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
