@@ -10,7 +10,7 @@ const FLASH_TOAST_KEY = "pending_toast";
 
 export async function getErrorMessage(res: Response) {
   try {
-    const data = await res.json();
+    const data = (await res.json()) as any;
     return data.error || data.message || "An unexpected error occurred";
   } catch {
     return `Request failed with status ${res.status}`;

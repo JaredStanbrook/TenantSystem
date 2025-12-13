@@ -19,7 +19,7 @@ export const Layout: FC<LayoutProps> = (props) => {
         <link rel="icon" type="image/svg+xml" href="/house-door.svg" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>${props.title}</title>
-        ${import.meta.env.PROD
+        ${(import.meta.env ? import.meta.env.PROD : true)
           ? html`<link rel="stylesheet" href="/static/style.css" />`
           : html`<link rel="stylesheet" href="/worker/index.css" />`}
         <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js"></script>

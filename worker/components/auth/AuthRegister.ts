@@ -61,7 +61,9 @@ export class AuthRegister extends LitElement {
     });
 
     // Update role selector form attribute if needed
-    const roleSelect = this.querySelector<HTMLSelectElement>("select[name='role']");
+    const roleSelect = this.renderRoot.querySelector(
+      "select[name='role']"
+    ) as HTMLSelectElement | null;
     if (roleSelect) {
       const formId =
         tab === "passkey" ? "passkey-form" : tab === "pin" ? "pin-form" : "register-form";

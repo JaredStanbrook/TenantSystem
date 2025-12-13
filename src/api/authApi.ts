@@ -3,7 +3,7 @@ import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query
 import { api } from "@/api/apiClient";
 import { type CreateUser } from "@server/sharedTypes";
 import { handleResponseError, safeJson } from "@/lib/utils";
-import { type User } from "@server/db.example/schema/user";
+import { type User } from "@server/db/schema/user";
 import { toast } from "sonner";
 
 export const auth = api.auth;

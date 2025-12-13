@@ -9,6 +9,7 @@
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
     "allowImportingTsExtensions": true,
     "lib": [
       "ESNext",
@@ -38,7 +39,8 @@
   },
   "include": [
     "worker/**/*",
-    "vite.config.ts"
+    "vite.config.ts",
+    "old/db"
   ],
   "exclude": [
     "node_modules",

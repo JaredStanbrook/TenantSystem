@@ -214,9 +214,9 @@ export const registerPasskeyVerifySchema = z.object({
       clientDataJSON: base64UrlString,
       attestationObject: base64UrlString,
       transports: z.array(z.string()).optional(),
-      // extensions and other optional fields can be added if needed
     }),
-    clientExtensionResults: z.object({}).optional(),
+    // Change z.object({}) to z.any() to allow WebAuthn extension data
+    clientExtensionResults: z.any().optional(),
     authenticatorAttachment: z.enum(["platform", "cross-platform"]).optional(),
   }),
 });
@@ -239,7 +239,8 @@ export const loginPasskeyVerifySchema = z.object({
       signature: base64UrlString,
       userHandle: base64UrlString.optional(),
     }),
-    clientExtensionResults: z.object({}).optional(),
+    // Change z.object({}) to z.any() here as well
+    clientExtensionResults: z.any().optional(),
     authenticatorAttachment: z.enum(["platform", "cross-platform"]).optional(),
   }),
 });

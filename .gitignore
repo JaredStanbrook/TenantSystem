@@ -180,4 +180,4 @@ bun.lock.d
 wrangler.toml
 worker-configuration.d.ts
 drizzle/
-
+old/

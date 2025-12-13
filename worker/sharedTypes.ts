@@ -1,12 +1,12 @@
-import { insertExpenseSchema } from "./db.example/schema/expense";
-import { insertUserSchema } from "./db.example/schema/user";
-import { insertSessionSchema } from "./db.example/schema/session";
-import { insertBillSchema } from "./db.example/schema/bill";
-import { insertPropertySchema } from "./db.example/schema/property";
+import { insertExpenseSchema } from "../old/db/schema/expense";
+import { insertUserSchema } from "../old/db/schema/user";
+import { insertSessionSchema } from "../old/db/schema/session";
+import { insertBillSchema } from "../old/db/schema/bill";
+import { insertPropertySchema } from "../old/db/schema/property";
 
 import { z } from "zod/v4";
-import { insertUserPropertySchema } from "./db.example/schema/userProperty";
-import { insertWaitlistSchema } from "./db.example/schema/waitlist";
+import { insertUserPropertySchema } from "../old/db/schema/userProperty";
+import { insertWaitlistSchema } from "../old/db/schema/waitlist";
 
 export const createBillSchema = insertBillSchema
   .omit({

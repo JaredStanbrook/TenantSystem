@@ -22,7 +22,7 @@ import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { format } from "date-fns";
 import { CalendarIcon } from "lucide-react";
 import { useContext, useState } from "react";
-import { property } from "@server/db.example/schema/property";
+import { property } from "@server/db/schema/property";
 import { SelectedPropertyContext } from "@/contexts/SelectedPropertyContext";
 
 export const Route = createFileRoute("/admin/create-bill")({
