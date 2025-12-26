@@ -1,6 +1,6 @@
 // worker/schema/shared_expense.schema.ts
 import { integer, text, sqliteTable } from "drizzle-orm/sqlite-core";
-import { createInsertSchema } from "drizzle-zod";
+import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { users } from "./auth.schema";
@@ -59,3 +59,9 @@ export const createExpenseFormSchema = insertSharedExpenseSchema.extend({
     })
   ),
 });
+
+export const selectSharedExpenseSchema = createSelectSchema(sharedExpense);
+export type SharedExpense = z.infer<typeof selectSharedExpenseSchema>;
+
+export const selectExpenseSplitSchema = createSelectSchema(expenseSplit);
+export type ExpenseSplit = z.infer<typeof selectExpenseSplitSchema>;

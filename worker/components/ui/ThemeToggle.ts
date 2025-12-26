@@ -46,7 +46,7 @@ export class ThemeToggle extends LitElement {
       <button
         @click=${this.toggle}
         type="button"
-        class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground transition-colors"
         aria-label="Toggle theme">
         <span class="${this.theme === "light" ? "block" : "hidden"}">
           <i data-lucide="sun"></i>

@@ -1,13 +1,16 @@
 import { html } from "hono/html";
 import type { FC, Child } from "hono/jsx";
-import { type SafeUser } from "@server/schema/auth.schema";
+import { type PropsUser } from "@server/schema/auth.schema";
 import { NavBar } from "./components/NavBar";
+import { SafeProperty } from "@server/schema/property.schema";
 
 interface LayoutProps {
   title?: string;
   children?: Child;
-  user?: SafeUser | null;
+  user?: PropsUser | null;
   headExtra?: Child;
+  currentPropertyId?: number;
+  properties?: SafeProperty[];
 }
 
 export const Layout: FC<LayoutProps> = (props) => {
@@ -37,12 +40,14 @@ export const Layout: FC<LayoutProps> = (props) => {
         ${NavBar({
           user: props.user,
           currentPath: "",
+          properties: props.properties,
+          currentPropertyId: props.currentPropertyId,
         })}
 
-        <main class="mx-auto relative p-4 flex-grow w-full max-w-7xl">
-          <!-- Main content container that HTMX will target -->
-          <div id="main-content" class="w-full">${props.children}</div>
+        <main hx-boost="true" id="main-content" class="relative flex-grow w-full">
+          ${props.children}
         </main>
+        <div id="modal-container"></div>
 
         <app-toaster></app-toaster>
 

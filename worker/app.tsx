@@ -1,6 +1,11 @@
 import { Hono } from "hono";
+import { setCookie, deleteCookie } from "hono/cookie";
+import { zValidator } from "@hono/zod-validator";
+import { z } from "zod";
+
 import { globalRenderer } from "./middleware/renderer.middleware.tsx";
 import { ProfilePage } from "./views/pages/Profile";
+import { JoinPage } from "./views/pages/Join.tsx";
 
 import { apiAuth } from "./routes/api/auth";
 /*
@@ -23,15 +28,26 @@ import type { AppEnv } from "./types";
 import { propertyRoute } from "./routes/admin/property.tsx";
 import { SafeUser } from "./schema/auth.schema.ts";
 import { invoiceRoute } from "./routes/admin/invoice.tsx";
+import { tenancyRoute } from "./routes/admin/tenancy.tsx";
+import { flashToast } from "./lib/htmx-helpers.ts";
+import { roomRoute } from "./routes/admin/room.ts";
 
 const admin = new Hono<AppEnv>();
 admin.route("/properties", propertyRoute);
+admin.route("/invoices", invoiceRoute);
+admin.route("/tenancies", tenancyRoute);
+admin.route("/rooms", roomRoute);
 
 const app = new Hono<AppEnv>()
   .use("*", globalRenderer)
+
   .route("/admin", admin)
-  .route("/admin/invoices", invoiceRoute)
   .route("/", webAuth)
+  .get("/join", (c) => {
+    return c.render(<JoinPage />, {
+      title: "Join",
+    });
+  })
   .get("/profile", (c) => {
     const { auth } = c.var;
 
@@ -43,10 +59,32 @@ const app = new Hono<AppEnv>()
       title: "Profile",
     });
   })
+  .post(
+    "/session/property",
+    zValidator("form", z.object({ propertyId: z.string() })),
+    async (c) => {
+      const { propertyId } = c.req.valid("form");
+
+      if (propertyId === "all") {
+        // Logic for "View All" - remove the filter
+        deleteCookie(c, "selected_property_id");
+      } else {
+        // Set the specific property ID in a secure cookie
+        setCookie(c, "selected_property_id", propertyId, {
+          path: "/",
+          secure: process.env.NODE_ENV === "production",
+          httpOnly: true,
+          maxAge: 60 * 60 * 24 * 30, // 30 days
+          sameSite: "Lax",
+        });
+      }
+
+      c.header("HX-Refresh", "true");
+      return c.body(null);
+    }
+  )
   /*
-  .route("/expenses", expenseRoute)
   .route("/bills", billRoute)
-  .route("/properties", propertyRoute)
   .route("/user-properties", userPropertyRoute)
   .route("/waitlist", waitlistRoute)
   */

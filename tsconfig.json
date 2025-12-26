@@ -45,5 +45,14 @@
   "exclude": [
     "node_modules",
     "dist"
+  ],
+  "plugins": [
+    {
+      "name": "ts-lit-plugin",
+      "rules": {
+        "no-incompatible-type-binding": "off",
+        "no-unknown-attribute": "off"
+      }
+    }
   ]
 }

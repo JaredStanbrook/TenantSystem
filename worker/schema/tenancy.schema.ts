@@ -5,48 +5,61 @@ import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { users } from "./auth.schema";
 import { property } from "./property.schema";
+import { room } from "./room.schema";
+
+const emptyToUndefined = (val: unknown) => (val === "" ? undefined : val);
+
+export const TENANCY_STATUS_VALUES = [
+  "pending_agreement",
+  "bond_pending",
+  "move_in_ready",
+  "active",
+  "notice_period",
+  "ended_pending_bond",
+  "closed",
+  "evicted",
+] as const;
 
 export const tenancy = sqliteTable("tenancy", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-
-  // Relationships
   userId: text("user_id")
     .notNull()
     .references(() => users.id),
   propertyId: integer("property_id")
     .notNull()
     .references(() => property.id),
+  roomId: integer("room_id").references(() => room.id), // New link to room
 
-  // Lease Details
-  startDate: integer("start_date", { mode: "timestamp" }).notNull(),
-  endDate: integer("end_date", { mode: "timestamp" }), // Nullable for periodic leases
-
-  // Status
-  status: text("status", { enum: ["active", "past", "evicted"] })
-    .default("active")
+  // Contractual Process Status
+  status: text("status", {
+    enum: TENANCY_STATUS_VALUES,
+  })
+    .default("pending_agreement")
     .notNull(),
 
-  // Financial agreements (optional overrides)
-  agreedRentAmount: integer("agreed_rent_amount"), // If different from property base rent
+  startDate: integer("start_date", { mode: "timestamp" }).notNull(),
+  endDate: integer("end_date", { mode: "timestamp" }),
 
-  // Timestamps
+  agreedRentAmount: integer("agreed_rent_amount"),
+  bondAmount: integer("bond_amount"), // Track bond specifically
+
   createdAt: integer("created_at", { mode: "timestamp" })
     .default(sql`(unixepoch())`)
     .notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp" })
-    .default(sql`(unixepoch())`)
-    .notNull()
-    .$onUpdate(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).$onUpdate(() => new Date()),
 });
 
 // --- Zod Schemas ---
-export const insertTenancySchema = createInsertSchema(tenancy, {
+export const createTenancyFormSchema = z.object({
+  email: z.email(),
+  propertyId: z.coerce.number(),
+  roomId: z.preprocess(emptyToUndefined, z.coerce.number().optional()),
   startDate: z.coerce.date(),
-  endDate: z.coerce.date().optional(),
+  endDate: z.preprocess(emptyToUndefined, z.coerce.date().optional()),
+  bondAmount: z.preprocess(emptyToUndefined, z.coerce.number().optional()),
 });
 
-export const formTenancySchema = insertTenancySchema.omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
+export const updateTenancyFormSchema = createTenancyFormSchema.omit({ email: true });
+
+export const selectTenancySchema = createSelectSchema(tenancy);
+export type Tenancy = z.infer<typeof selectTenancySchema>;

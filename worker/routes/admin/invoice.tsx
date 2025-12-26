@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { eq, desc, inArray, and } from "drizzle-orm";
+import { eq, desc, inArray, and, count } from "drizzle-orm";
 import { z } from "zod";
 
 // Schemas & Types
@@ -11,15 +11,30 @@ import type { AppEnv } from "@server/types";
 
 // UI Components
 import { InvoiceTable, InvoiceForm } from "@views/invoices/InvoiceComponents";
-import { htmxResponse, htmxToast, htmxPushUrl } from "@server/lib/htmx-helpers";
+import {
+  htmxResponse,
+  htmxToast,
+  htmxPushUrl,
+  htmxRedirect,
+  flashToast,
+} from "@server/lib/htmx-helpers";
 
 // Helper Schema for Form Submission (handling cents conversion)
-const formInvoiceRouteSchema = z.object({
+const formInvoiceSchema = z.object({
   propertyId: z.coerce.number(),
   type: z.enum(["rent", "water", "electricity", "gas", "internet", "maintenance", "other"]),
   description: z.string().optional(),
-  amountDollars: z.coerce.number().min(0.01, "Amount must be positive"), // Input is dollars
+  amountDollars: z.coerce.number().min(0.01, "Amount must be positive"),
   dueDate: z.coerce.date(),
+  page: z.string().optional().default("1"),
+});
+const createInvoiceSchema = formInvoiceSchema.extend({
+  dueDate: z.coerce
+    .date()
+    .min(
+      new Date(new Date().setHours(0, 0, 0, 0)),
+      "Due date cannot be in the past for new invoices"
+    ),
 });
 
 export const invoiceRoute = new Hono<AppEnv>();
@@ -29,13 +44,11 @@ invoiceRoute.get("/", async (c) => {
   const db = c.var.db;
   const user = c.var.auth.user!; // Assumes auth middleware ran
 
-  // A. Fetch Properties user is allowed to see (Ownership OR Tenancy)
-  // We use two queries or a union logic. simpler here to separate by role or check both.
+  const page = parseInt(c.req.query("page") || "1");
+  const pageSize = 10;
+  const offset = (page - 1) * pageSize;
 
-  // 1. Get properties owned by user
   const ownedProperties = await db.select().from(property).where(eq(property.landlordId, user.id));
-
-  // 2. Get properties rented by user
   const rentedProperties = await db
     .select({ propertyId: tenancy.propertyId })
     .from(tenancy)
@@ -48,8 +61,24 @@ invoiceRoute.get("/", async (c) => {
 
   // If no access to any property, show empty
   if (allowedPropertyIds.length === 0) {
-    return htmxResponse(c, "Invoices", InvoiceTable({ invoices: [], properties: [] }));
+    return htmxResponse(
+      c,
+      "Invoices",
+      InvoiceTable({
+        invoices: [],
+        properties: [],
+        pagination: { page: 1, totalPages: 1 },
+      })
+    );
   }
+
+  const [countResult] = await db
+    .select({ count: count(invoice.id) })
+    .from(invoice)
+    .where(inArray(invoice.propertyId, allowedPropertyIds));
+
+  const totalItems = Number(countResult.count);
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
 
   // B. Fetch Invoices for these properties
   const invoicesData = await db
@@ -60,7 +89,9 @@ invoiceRoute.get("/", async (c) => {
     .from(invoice)
     .innerJoin(property, eq(invoice.propertyId, property.id))
     .where(inArray(invoice.propertyId, allowedPropertyIds))
-    .orderBy(desc(invoice.dueDate));
+    .orderBy(desc(invoice.dueDate))
+    .limit(pageSize)
+    .offset(offset);
 
   // Flatten for UI
   const flatInvoices = invoicesData.map((d) => ({
@@ -74,7 +105,8 @@ invoiceRoute.get("/", async (c) => {
     "Invoices",
     InvoiceTable({
       invoices: flatInvoices,
-      properties: ownedProperties, // Only owned properties passed for "Create" dropdowns
+      properties: ownedProperties,
+      pagination: { page, totalPages },
     })
   );
 });
@@ -83,6 +115,7 @@ invoiceRoute.get("/", async (c) => {
 invoiceRoute.get("/create", async (c) => {
   const db = c.var.db;
   const userId = c.var.auth.user!.id;
+  const page = c.req.query("page") || "1";
 
   // Only fetch properties OWNED by this user
   const myProperties = await db.select().from(property).where(eq(property.landlordId, userId));
@@ -95,16 +128,19 @@ invoiceRoute.get("/create", async (c) => {
     return c.text("Please create a property first.");
   }
 
-  const fragment = InvoiceForm({
-    properties: myProperties,
-    action: "/admin/invoices",
-  });
-
-  return htmxResponse(c, "Create Invoice", fragment);
+  return htmxResponse(
+    c,
+    "Create Invoice",
+    InvoiceForm({
+      properties: myProperties,
+      action: "/admin/invoices",
+      page: page,
+    })
+  );
 });
 
 // --- 3. POST /admin/invoices (Create) ---
-invoiceRoute.post("/", zValidator("form", formInvoiceRouteSchema), async (c) => {
+invoiceRoute.post("/", zValidator("form", createInvoiceSchema), async (c) => {
   const db = c.var.db;
   const data = c.req.valid("form");
   const userId = c.var.auth.user!.id;
@@ -116,6 +152,7 @@ invoiceRoute.post("/", zValidator("form", formInvoiceRouteSchema), async (c) => 
     .where(and(eq(property.id, data.propertyId), eq(property.landlordId, userId)));
 
   if (!prop) {
+    htmxToast(c, "Unauthorized: You do not own this property", { type: "error" });
     return c.text("Unauthorized: You do not own this property", 403);
   }
 
@@ -127,15 +164,11 @@ invoiceRoute.post("/", zValidator("form", formInvoiceRouteSchema), async (c) => 
     type: data.type,
     description: data.description,
     dueDate: data.dueDate,
-    totalAmount: totalAmountCents, // Store as integer
+    totalAmount: totalAmountCents,
   });
 
-  htmxToast(c, "Invoice Created", { type: "success" });
-  htmxPushUrl(c, "/admin/invoices");
-
-  // Redirect logic: simple way is to re-trigger the GET handler or use htmx redirect
-  // Here we assume client handles the pushUrl and we return the list view
-  return c.redirect("/admin/invoices");
+  flashToast(c, "Invoice Created", { type: "success" });
+  return htmxRedirect(c, "/admin/invoices");
 });
 
 // --- 4. GET /admin/invoices/:id/edit ---
@@ -143,6 +176,8 @@ invoiceRoute.get("/:id/edit", async (c) => {
   const db = c.var.db;
   const id = Number(c.req.param("id"));
   const userId = c.var.auth.user!.id;
+
+  const page = c.req.query("page") || "1";
 
   // Join property to ensure ownership
   const [result] = await db
@@ -153,6 +188,7 @@ invoiceRoute.get("/:id/edit", async (c) => {
 
   // Security: Only landlord can edit
   if (!result || result.property.landlordId !== userId) {
+    htmxToast(c, "Unauthorized Access", { type: "error" });
     return c.text("Unauthorized", 401);
   }
 
@@ -166,12 +202,13 @@ invoiceRoute.get("/:id/edit", async (c) => {
       invoice: result.invoice,
       properties: myProperties,
       action: `/admin/invoices/${id}/update`,
+      page: page,
     })
   );
 });
 
 // --- 5. POST /admin/invoices/:id/update ---
-invoiceRoute.post("/:id/update", zValidator("form", formInvoiceRouteSchema), async (c) => {
+invoiceRoute.post("/:id/update", zValidator("form", formInvoiceSchema), async (c) => {
   const db = c.var.db;
   const id = Number(c.req.param("id"));
   const data = c.req.valid("form");
@@ -206,9 +243,8 @@ invoiceRoute.post("/:id/update", zValidator("form", formInvoiceRouteSchema), asy
     })
     .where(eq(invoice.id, id));
 
-  htmxToast(c, "Invoice Updated", { type: "success" });
-  htmxPushUrl(c, "/admin/invoices");
-  return c.redirect("/admin/invoices");
+  flashToast(c, "Invoice Updated", { type: "success" });
+  return htmxRedirect(c, `/admin/invoices?page=${data.page}`);
 });
 
 // --- 6. DELETE /admin/invoices/:id ---
@@ -229,10 +265,12 @@ invoiceRoute.delete("/:id", async (c) => {
       )
     );
 
-  if (!item) return c.text("Unauthorized", 401);
+  if (!item) {
+    return c.text("Unauthorized", 403);
+  }
 
   await db.delete(invoice).where(eq(invoice.id, id));
 
-  // Return empty string to remove the row from DOM
+  htmxToast(c, "Invoice Deleted", { type: "info" });
   return c.body(null);
 });

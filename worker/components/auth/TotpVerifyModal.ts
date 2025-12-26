@@ -109,7 +109,7 @@ export class TotpVerifyModal extends LitElement {
                 inputmode="numeric"
                 placeholder="000 000"
                 ?disabled=${this.isVerifying}
-                class="flex h-12 w-full rounded-md border border-input bg-background px-3 py-2 text-center text-xl tracking-[0.5em] font-mono shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50" />
+                class="flex h-12 w-full rounded-lg border border-input bg-background px-3 py-2 text-center text-xl tracking-[0.5em] font-mono shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50" />
               ${this.error
                 ? html`<p class="text-sm text-destructive text-center">${this.error}</p>`
                 : nothing}
@@ -120,13 +120,13 @@ export class TotpVerifyModal extends LitElement {
             <button
               @click=${this.closeModal}
               ?disabled=${this.isVerifying}
-              class="inline-flex items-center justify-center rounded-md text-sm font-medium border border-input bg-background hover:bg-accent h-9 px-4 py-2 disabled:opacity-50">
+              class="inline-flex items-center justify-center rounded-lg text-sm font-medium border border-input bg-background hover:bg-accent h-9 px-4 py-2 disabled:opacity-50">
               Cancel
             </button>
             <button
               @click=${this.handleVerify}
               ?disabled=${this.isVerifying || this.code.length !== 6}
-              class="inline-flex items-center justify-center rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 py-2 disabled:opacity-50">
+              class="inline-flex items-center justify-center rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 py-2 disabled:opacity-50">
               ${this.isVerifying ? "Verifying..." : "Verify"}
             </button>
           </div>

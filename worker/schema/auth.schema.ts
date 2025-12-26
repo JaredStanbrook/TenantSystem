@@ -179,6 +179,17 @@ export const safeUserSchema = selectUserSchema.extend({
   roles: z.array(z.string()),
   permissions: z.array(z.string()),
 });
+export const propsUserSchema = selectUserSchema.extend({
+  roles: z.array(z.string()),
+  permissions: z.array(z.string()),
+  properties: z.array(
+    z.object({
+      id: z.number(),
+      nickname: z.string().optional(),
+      addressLine1: z.string(),
+    })
+  ),
+});
 
 export const updateUserProfileSchema = z.object({
   displayName: z.string().min(2).max(50).optional(),
@@ -308,6 +319,7 @@ export type SelectUser = z.infer<typeof selectUserSchema>;
 export type RegisterUser = z.infer<typeof registerUserSchema>;
 export type LoginUser = z.infer<typeof loginUserSchema>;
 export type SafeUser = z.infer<typeof safeUserSchema>;
+export type PropsUser = z.infer<typeof propsUserSchema>;
 export type RegisterPasskeyVerify = z.infer<typeof registerPasskeyVerifySchema>;
 export type LoginPasskeyVerify = z.infer<typeof loginPasskeyVerifySchema>;
 export type ChangePassword = z.infer<typeof changePasswordSchema>;

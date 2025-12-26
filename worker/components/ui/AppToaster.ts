@@ -125,7 +125,7 @@ export class AppToaster extends LitElement {
 
               <button
                 @click=${() => this.removeToast(toast.id)}
-                class="absolute right-2 top-2 rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity hover:text-foreground hover:bg-muted focus:opacity-100 focus:outline-none group-hover:opacity-100"
+                class="absolute right-2 top-2 rounded-lg p-1 text-muted-foreground/50 opacity-0 transition-opacity hover:text-foreground hover:bg-muted focus:opacity-100 focus:outline-none group-hover:opacity-100"
                 aria-label="Close">
                 ${IconMap.close}
               </button>

@@ -5,6 +5,7 @@ import { Home } from "@server/views/pages/Home";
 import { Login } from "@server/views/pages/Login";
 import { Register } from "@server/views/pages/Register";
 import type { AppEnv } from "../../types";
+import { htmxRedirect, htmxToast } from "@server/lib/htmx-helpers";
 
 export const webAuth = new Hono<AppEnv>();
 
@@ -40,4 +41,15 @@ webAuth.get("/login", (c) => {
   return c.render(<Login {...props} />, {
     title: "Sign In",
   });
+});
+webAuth.post("/web/auth/logout", async (c) => {
+  // 1. Clear Cookies/Session
+  const { auth } = c.var;
+  auth.destroySession();
+
+  htmxToast(c, "Logged out successfully", {
+    type: "success",
+  });
+  htmxRedirect(c, "/login");
+  return c.body(null);
 });

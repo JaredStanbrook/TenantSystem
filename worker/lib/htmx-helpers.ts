@@ -1,5 +1,7 @@
 import { Context } from "hono";
 import type { HtmlEscapedString } from "hono/utils/html";
+import { setCookie } from "hono/cookie";
+import { set } from "zod";
 
 type Renderable = string | HtmlEscapedString | Promise<HtmlEscapedString>;
 /**
@@ -75,6 +77,34 @@ export const htmxToast = (
   });
 };
 
+export const flashToast = (
+  c: Context,
+  message: string,
+  options?: {
+    description?: string;
+    type?: "success" | "error" | "info" | "warning";
+    duration?: number;
+  }
+) => {
+  const { description, type = "success", duration = 4000 } = options || {};
+  setCookie(
+    c,
+    "flash-toast",
+    JSON.stringify({
+      toast: {
+        message,
+        description,
+        type,
+        duration,
+      },
+    }),
+    {
+      httpOnly: false,
+      path: "/",
+      maxAge: 5,
+    }
+  );
+};
 // Example usage in your routes:
 /*
 import { PropertyTable, PropertyForm } from "@/views/properties/PropertyComponents";

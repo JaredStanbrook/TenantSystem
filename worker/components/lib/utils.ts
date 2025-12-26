@@ -47,14 +47,23 @@ export function redirectWithToast(
 }
 
 export function getFlashToast() {
-  const flash = sessionStorage.getItem(FLASH_TOAST_KEY);
-  if (!flash) return null;
+  const name = "flash-toast=";
+  const decodedCookie = decodeURIComponent(document.cookie);
+  const ca = decodedCookie.split(";");
 
-  try {
-    sessionStorage.removeItem(FLASH_TOAST_KEY); // Clear immediately
-    return JSON.parse(flash);
-  } catch (e) {
-    console.error("Failed to parse flash toast", e);
-    return null;
+  for (let i = 0; i < ca.length; i++) {
+    let c = ca[i].trim();
+    if (c.indexOf(name) === 0) {
+      const jsonStr = c.substring(name.length, c.length);
+      try {
+        const data = JSON.parse(jsonStr);
+        // DELETE COOKIE: Set expiry to the past
+        document.cookie = "flash-toast=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+        return data.toast; // Returns { message, description, type, etc. }
+      } catch (e) {
+        return null;
+      }
+    }
   }
+  return null;
 }

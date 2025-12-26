@@ -46,16 +46,16 @@ export class ProfileEditableName extends LitElement {
             type="text"
             .value=${this.draftValue}
             @input=${(e: Event) => (this.draftValue = (e.target as HTMLInputElement).value)}
-            class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
+            class="flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
           <button
             @click=${this.save}
             ?disabled=${this.isLoading}
-            class="inline-flex h-9 items-center justify-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground shadow hover:bg-primary/90 disabled:opacity-50">
+            class="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground shadow hover:bg-primary/90 disabled:opacity-50">
             ${this.isLoading ? "..." : "Save"}
           </button>
           <button
             @click=${() => (this.isEditing = false)}
-            class="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-3 text-xs font-medium shadow-sm hover:bg-accent hover:text-accent-foreground">
+            class="inline-flex h-9 items-center justify-center rounded-lg border border-input bg-background px-3 text-xs font-medium shadow-sm hover:bg-accent hover:text-accent-foreground">
             Cancel
           </button>
         </div>
@@ -112,7 +112,7 @@ export class ProfilePasswordModal extends LitElement {
     return html`
       <button
         @click=${() => (this.isOpen = true)}
-        class="inline-flex items-center justify-center rounded-md text-sm font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2">
+        class="inline-flex items-center justify-center rounded-lg text-sm font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2">
         Change Password
       </button>
 
@@ -136,7 +136,7 @@ export class ProfilePasswordModal extends LitElement {
                       name="currentPassword"
                       type="password"
                       required
-                      class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
+                      class="flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
                   </div>
                   <div class="grid gap-2">
                     <label class="text-sm font-medium">New Password</label>
@@ -145,20 +145,20 @@ export class ProfilePasswordModal extends LitElement {
                       type="password"
                       required
                       minlength="8"
-                      class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
+                      class="flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
                   </div>
 
                   <div class="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 gap-2">
                     <button
                       type="button"
                       @click=${() => (this.isOpen = false)}
-                      class="inline-flex items-center justify-center rounded-md text-sm font-medium border border-input bg-background hover:bg-accent h-9 px-4 py-2">
+                      class="inline-flex items-center justify-center rounded-lg text-sm font-medium border border-input bg-background hover:bg-accent h-9 px-4 py-2">
                       Cancel
                     </button>
                     <button
                       type="submit"
                       ?disabled=${this.isLoading}
-                      class="inline-flex items-center justify-center rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 py-2 disabled:opacity-50">
+                      class="inline-flex items-center justify-center rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 py-2 disabled:opacity-50">
                       ${this.isLoading ? "Updating..." : "Update Password"}
                     </button>
                   </div>
@@ -199,7 +199,7 @@ export class ProfileDeleteModal extends LitElement {
     return html`
       <button
         @click=${() => (this.isOpen = true)}
-        class="inline-flex items-center justify-center rounded-md text-sm font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 h-9 px-4 py-2">
+        class="inline-flex items-center justify-center rounded-lg text-sm font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 h-9 px-4 py-2">
         Delete Account
       </button>
 
@@ -223,20 +223,20 @@ export class ProfileDeleteModal extends LitElement {
                   <input
                     @input=${(e: Event) =>
                       (this.confirmText = (e.target as HTMLInputElement).value)}
-                    class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    class="flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                     placeholder="DELETE" />
                 </div>
 
                 <div class="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 gap-2">
                   <button
                     @click=${() => (this.isOpen = false)}
-                    class="inline-flex items-center justify-center rounded-md text-sm font-medium border border-input bg-background hover:bg-accent h-9 px-4 py-2">
+                    class="inline-flex items-center justify-center rounded-lg text-sm font-medium border border-input bg-background hover:bg-accent h-9 px-4 py-2">
                     Cancel
                   </button>
                   <button
                     @click=${this.handleDelete}
                     ?disabled=${this.confirmText !== "DELETE" || this.isLoading}
-                    class="inline-flex items-center justify-center rounded-md text-sm font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 h-9 px-4 py-2 disabled:opacity-50">
+                    class="inline-flex items-center justify-center rounded-lg text-sm font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 h-9 px-4 py-2 disabled:opacity-50">
                     ${this.isLoading ? "Deleting..." : "Confirm Deletion"}
                   </button>
                 </div>
