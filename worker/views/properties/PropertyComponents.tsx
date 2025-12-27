@@ -1,6 +1,11 @@
 import { html } from "hono/html";
 import { Property } from "../../schema/property.schema";
-import { capitalize } from "../lib/utils";
+import { capitalize, StatusBadge } from "../lib/utils";
+const styles: Record<string, string> = {
+  vacant: "bg-blue-100 text-blue-800 border-blue-200",
+  occupied: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  maintenance: "bg-purple-100 text-purple-800 border-purple-200",
+};
 
 // --- 1. Property Table Row ---
 export const PropertyRow = ({ prop }: { prop: Property }) => html`
@@ -19,17 +24,7 @@ export const PropertyRow = ({ prop }: { prop: Property }) => html`
         </span>
       </div>
     </td>
-    <td class="p-4 align-middle">
-      <span
-        class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${prop.status ===
-        "occupied"
-          ? "border-transparent bg-green-500/15 text-green-700"
-          : prop.status === "maintenance"
-          ? "border-transparent bg-yellow-500/15 text-yellow-700"
-          : "border-transparent bg-secondary text-secondary-foreground"}">
-        ${capitalize(prop.status)}
-      </span>
-    </td>
+    <td class="p-4 align-middle">${StatusBadge(prop.status, styles)}</td>
     <td class="p-4 align-middle text-right">
       <div class="flex justify-end gap-2">
         <button
@@ -82,20 +77,13 @@ export const PropertyForm = ({
           <h2 class="text-3xl font-bold tracking-tight">
             ${prop?.id ? "Edit Property" : "Add New Property"}
           </h2>
-          <p class="text-muted-foreground mt-1">
-            ${prop?.id
-              ? "Update property details below"
-              : "Fill in the details to add a new property"}
-          </p>
         </div>
         <button
           hx-get="/admin/properties"
           hx-target="#main-content"
           hx-swap="innerHTML"
-          hx-push-url="true"
-          class="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-          <i data-lucide="arrow-left" class="w-4 h-4"></i>
-          Back to list
+          class="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+          <i data-lucide="arrow-left" class="w-4 h-4"></i> Back to list
         </button>
       </div>
 
@@ -103,35 +91,25 @@ export const PropertyForm = ({
         hx-post="${action}"
         hx-target="#main-content"
         hx-swap="innerHTML"
-        hx-disabled-elt="find button[type='submit']"
-        class="space-y-8 border rounded-lg p-6 bg-card text-card-foreground shadow-sm relative">
+        class="space-y-8 border rounded-lg p-6 bg-card text-card-foreground shadow-sm">
         <div class="grid gap-4 md:grid-cols-2">
           <div class="space-y-2">
-            <label
-              class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-              Nickname <span class="text-muted-foreground">(Optional)</span>
-            </label>
+            <label class="text-sm font-medium">Nickname</label>
             <input
               name="nickname"
               value="${prop?.nickname || ""}"
-              class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              placeholder="e.g. My First Rental" />
+              class="flex h-10 w-full rounded-lg border border-input px-3" />
           </div>
           <div class="space-y-2">
-            <label
-              class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-              Property Type <span class="text-destructive">*</span>
-            </label>
+            <label class="text-sm font-medium">Type</label>
             <select
               name="propertyType"
-              required
-              class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+              class="flex h-10 w-full rounded-lg border border-input px-3">
               ${["house", "apartment", "unit", "studio"].map(
-                (t) => html`
-                  <option value="${t}" ${prop?.propertyType === t ? "selected" : ""}>
-                    ${t.charAt(0).toUpperCase() + t.slice(1)}
-                  </option>
-                `
+                (t) =>
+                  html`<option value="${t}" ${prop?.propertyType === t ? "selected" : ""}>
+                    ${t}
+                  </option>`
               )}
             </select>
           </div>
@@ -139,177 +117,183 @@ export const PropertyForm = ({
 
         <div class="space-y-4">
           <h3 class="text-lg font-semibold flex items-center gap-2">
-            <i data-lucide="map-pin" class="w-5 h-5"></i>
-            Location
+            <i data-lucide="map-pin" class="w-5 h-5"></i> Location
           </h3>
+
           <div class="grid gap-4">
             <div class="space-y-2">
               <label class="text-sm font-medium leading-none">
                 Address Line 1 <span class="text-destructive">*</span>
               </label>
+
+              <div id="google-autocomplete-container" class="w-full"></div>
+
               <input
+                type="hidden"
+                id="address-hidden-input"
                 name="addressLine1"
-                value="${prop?.addressLine1 || ""}"
-                required
-                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                placeholder="123 Main Street" />
+                value="${prop?.addressLine1 || ""}" />
+
               ${errors.addressLine1
-                ? html`<p class="text-sm text-destructive flex items-center gap-1">
-                    <i data-lucide="alert-circle" class="w-4 h-4"></i>
-                    ${errors.addressLine1[0]}
-                  </p>`
+                ? html`<p class="text-sm text-destructive">${errors.addressLine1[0]}</p>`
                 : ""}
             </div>
+
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div class="space-y-2">
-                <label class="text-sm font-medium leading-none"
-                  >City <span class="text-destructive">*</span></label
-                >
+                <label class="text-sm font-medium">City</label>
                 <input
+                  id="city-input"
                   name="city"
                   value="${prop?.city || ""}"
-                  placeholder="City"
                   required
-                  class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                  class="flex h-10 w-full rounded-lg border border-input px-3" />
               </div>
               <div class="space-y-2">
-                <label class="text-sm font-medium leading-none"
-                  >State <span class="text-destructive">*</span></label
-                >
+                <label class="text-sm font-medium">State</label>
                 <input
+                  id="state-input"
                   name="state"
                   value="${prop?.state || ""}"
-                  placeholder="State"
                   required
-                  class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                  class="flex h-10 w-full rounded-lg border border-input px-3" />
               </div>
               <div class="space-y-2">
-                <label class="text-sm font-medium leading-none"
-                  >Postcode <span class="text-destructive">*</span></label
-                >
+                <label class="text-sm font-medium">Postcode</label>
                 <input
+                  id="postcode-input"
                   name="postcode"
                   value="${prop?.postcode || ""}"
-                  placeholder="Postcode"
                   required
-                  class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                  class="flex h-10 w-full rounded-lg border border-input px-3" />
               </div>
               <div class="space-y-2">
-                <label class="text-sm font-medium leading-none">Country</label>
+                <label class="text-sm font-medium">Country</label>
                 <input
+                  id="country-input"
                   name="country"
                   value="${prop?.country || "Australia"}"
-                  placeholder="Country"
-                  class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                  class="flex h-10 w-full rounded-lg border border-input px-3" />
               </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="space-y-4">
-          <h3 class="text-lg font-semibold flex items-center gap-2">
-            <i data-lucide="home" class="w-5 h-5"></i>
-            Property Details
-          </h3>
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div class="space-y-2">
-              <label class="text-sm font-medium leading-none flex items-center gap-1">
-                <i data-lucide="bed" class="w-4 h-4"></i>
-                Bedrooms <span class="text-destructive">*</span>
-              </label>
-              <input
-                type="number"
-                name="bedrooms"
-                value="${prop?.bedrooms ?? 1}"
-                min="0"
-                required
-                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
-            </div>
-            <div class="space-y-2">
-              <label class="text-sm font-medium leading-none flex items-center gap-1">
-                <i data-lucide="bath" class="w-4 h-4"></i>
-                Bathrooms <span class="text-destructive">*</span>
-              </label>
-              <input
-                type="number"
-                name="bathrooms"
-                value="${prop?.bathrooms ?? 1}"
-                min="0"
-                step="0.5"
-                required
-                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
-            </div>
-            <div class="space-y-2">
-              <label class="text-sm font-medium leading-none flex items-center gap-1">
-                <i data-lucide="car" class="w-4 h-4"></i>
-                Parking
-              </label>
-              <input
-                type="number"
-                name="parkingSpaces"
-                value="${prop?.parkingSpaces ?? 0}"
-                min="0"
-                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
-            </div>
-            <div class="space-y-2">
-              <label class="text-sm font-medium leading-none flex items-center gap-1">
-                <i data-lucide="dollar-sign" class="w-4 h-4"></i>
-                Rent <span class="text-destructive">*</span>
-              </label>
-              <input
-                type="number"
-                name="rentAmount"
-                value="${prop?.rentAmount || ""}"
-                min="0"
-                step="0.01"
-                required
-                placeholder="0.00"
-                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
             </div>
           </div>
         </div>
 
         <div class="flex justify-end gap-3 pt-4 border-t">
-          <button
-            type="button"
-            hx-get="/admin/properties"
-            hx-target="#main-content"
-            hx-swap="innerHTML"
-            hx-push-url="true"
-            class="inline-flex items-center justify-center rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2">
-            Cancel
-          </button>
-          <button
-            type="submit"
-            class="inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed">
-            <i data-lucide="${prop?.id ? "save" : "plus"}" class="w-4 h-4"></i>
-            <span class="htmx-indicator:hidden">
-              ${prop?.id ? "Save Changes" : "Create Property"}
-            </span>
-            <span class="hidden htmx-indicator:inline-flex items-center gap-2">
-              <svg
-                class="animate-spin h-4 w-4"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24">
-                <circle
-                  class="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  stroke-width="4"></circle>
-                <path
-                  class="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              Saving...
-            </span>
+          <button type="submit" class="bg-primary text-primary-foreground h-10 px-4 rounded-lg">
+            Save Property
           </button>
         </div>
       </form>
     </div>
+
+    <script>
+      (function () {
+        // Use a slight delay to ensure HTMX swap is complete
+        setTimeout(async () => {
+          const container = document.getElementById("google-autocomplete-container");
+          const hiddenInput = document.getElementById("address-hidden-input");
+
+          if (!container || !hiddenInput) return;
+
+          // 1. Import the specific library
+          // Ensure you catch errors if the API key is invalid or library is missing
+          let PlaceAutocompleteElement;
+          try {
+            const placesLib = await google.maps.importLibrary("places");
+            PlaceAutocompleteElement = placesLib.PlaceAutocompleteElement;
+          } catch (e) {
+            console.error("Failed to load Google Maps Places library", e);
+            container.innerHTML =
+              '<input class="flex h-10 w-full rounded-lg border border-input px-3" placeholder="Manual entry (Map unavailable)" oninput="document.getElementById(\\'address-hidden-input\\').value = this.value">';
+            return;
+          }
+
+          // 2. Instantiate the element
+          const autocomplete = new PlaceAutocompleteElement();
+
+          // 3. Configuration (Optional)
+          // autocomplete.componentRestrictions = { country: 'au' };
+
+          // 4. Handle Styling
+          // The new element is a web component. You can add a class specifically for it
+          // defined in your global CSS, or accept the default Material look.
+          autocomplete.classList.add("w-full", "h-10", "block");
+
+          // 5. Append to DOM
+          container.innerHTML = ""; // Clear any previous content
+          container.appendChild(autocomplete);
+
+          // 6. Set Initial Value (if editing)
+          if (hiddenInput.value) {
+            // Note: The new API might not purely reflect text back into the input
+            // the same way a simple input value does, but we can try setting it.
+            // Often strictly used for search, but 'value' property exists on the element.
+            autocomplete.value = hiddenInput.value;
+          }
+
+          // 7. Listen for the new event: 'gmp-places-select'
+          autocomplete.addEventListener("gmp-places-select", async ({ place }) => {
+            // 'place' is a PlaceResult object.
+            // We might need to fetch fields if not automatically populated
+            await place.fetchFields({
+              fields: ["displayName", "formattedAddress", "addressComponents"],
+            });
+
+            // Update the hidden input with the clean address
+            hiddenInput.value = place.formattedAddress || place.displayName;
+
+            // Reset other fields
+            document.getElementById("city-input").value = "";
+            document.getElementById("state-input").value = "";
+            document.getElementById("postcode-input").value = "";
+            document.getElementById("country-input").value = "";
+
+            let streetNumber = "";
+            let route = "";
+
+            // Map components
+            for (const component of place.addressComponents) {
+              const type = component.types[0];
+              switch (type) {
+                case "street_number":
+                  streetNumber = component.longText;
+                  break;
+                case "route":
+                  route = component.longText;
+                  break;
+                case "locality":
+                  document.getElementById("city-input").value = component.longText;
+                  break;
+                case "administrative_area_level_1":
+                  document.getElementById("state-input").value = component.shortText;
+                  break;
+                case "postal_code":
+                  document.getElementById("postcode-input").value = component.longText;
+                  break;
+                case "country":
+                  document.getElementById("country-input").value = component.longText;
+                  break;
+              }
+            }
+
+            // Sync Main Address line if you prefer strictly street + route
+            if (streetNumber || route) {
+              hiddenInput.value = [streetNumber, route].filter(Boolean).join(" ");
+            }
+          });
+
+          // 8. Sync manual typing (edge case)
+          // If the user types but doesn't select a prediction, the new element
+          // might not fire a select event. We need to capture the text value.
+          // The internal input is inside Shadow DOM, so standard 'input' events
+          // on the custom element usually bubble up.
+          autocomplete.addEventListener("input", (e) => {
+            hiddenInput.value = e.target.value;
+          });
+        }, 100);
+      })();
+    </script>
   </div>
 `;
 

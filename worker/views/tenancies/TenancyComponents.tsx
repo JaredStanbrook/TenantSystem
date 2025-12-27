@@ -5,31 +5,17 @@ import { VALID_TRANSITIONS } from "@server/services/tenancy.service";
 import { Property } from "../../schema/property.schema";
 import { SafeUser } from "../../schema/auth.schema";
 import { SafeRoom } from "../../schema/room.schema";
-import { capitalize } from "../lib/utils";
+import { capitalize, StatusBadge } from "../lib/utils";
 
-// Helper for Status Badge Colors
-const getStatusBadge = (status: string) => {
-  const styles: Record<string, string> = {
-    pending_agreement: "bg-yellow-100 text-yellow-800 border-yellow-200",
-    bond_pending: "bg-amber-100 text-amber-800 border-amber-200",
-    move_in_ready: "bg-blue-100 text-blue-800 border-blue-200",
-    active: "bg-emerald-100 text-emerald-800 border-emerald-200",
-    notice_period: "bg-purple-100 text-purple-800 border-purple-200",
-    ended_pending_bond: "bg-rose-100 text-rose-800 border-rose-200",
-    closed: "bg-gray-100 text-gray-600 border-gray-200",
-    evicted: "bg-red-100 text-red-800 border-red-200",
-  };
-
-  // Format label: "pending_agreement" -> "Pending Agreement"
-  const label = status.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
-  const style = styles[status] || styles.closed;
-
-  return html`
-    <span
-      class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${style}">
-      ${label}
-    </span>
-  `;
+const styles: Record<string, string> = {
+  pending_agreement: "bg-yellow-100 text-yellow-800 border-yellow-200",
+  bond_pending: "bg-amber-100 text-amber-800 border-amber-200",
+  move_in_ready: "bg-blue-100 text-blue-800 border-blue-200",
+  active: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  notice_period: "bg-purple-100 text-purple-800 border-purple-200",
+  ended_pending_bond: "bg-rose-100 text-rose-800 border-rose-200",
+  closed: "bg-gray-100 text-gray-600 border-gray-200",
+  evicted: "bg-red-100 text-red-800 border-red-200",
 };
 
 // Joined Data Type
@@ -80,7 +66,7 @@ export const TenancyRow = ({ t }: { t: TenancyView }) => html`
           : html`<span class="text-xs opacity-50 pl-5.5">Periodic</span>`}
       </div>
     </td>
-    <td class="p-4 align-middle">${getStatusBadge(t.status)}</td>
+    <td class="p-4 align-middle">${StatusBadge(t.status, styles)}</td>
     <td class="p-4 align-middle text-right">
       <button
         hx-get="/admin/tenancies/${t.id}/edit"
@@ -384,7 +370,7 @@ export const TenancyStatusManager = ({
       hx-swap="outerHTML">
       <div class="flex items-center justify-between">
         <label class="text-sm font-semibold">Current Process Status</label>
-        ${getStatusBadge(status)}
+        ${StatusBadge(status, styles)}
       </div>
 
       <div class="w-full relative">
