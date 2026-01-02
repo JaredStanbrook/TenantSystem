@@ -33,13 +33,6 @@ export const JoinPage = () => {
         <FAQSection />
         <FooterSection />
       </div>
-      <script
-        type="module"
-        src={
-          import.meta.env.PROD
-            ? "/static/JoinComponent.js"
-            : "/worker/components/ui/JoinComponent.ts"
-        }></script>
     </>
   );
 };

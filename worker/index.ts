@@ -24,7 +24,18 @@ const worker = new Hono<AppEnv>();
 worker.use("*", logger());
 worker.use(
   cors({
-    origin: "*", // Adjust for production
+    origin: (origin) => {
+      // Allow local development
+      if (origin.includes("localhost") || origin.includes("127.0.0.1")) {
+        return origin;
+      }
+      // Allow production domain (from your wrangler config)
+      if (origin.endsWith("stanbrook.me")) {
+        return origin;
+      }
+      // Block others (or return your main domain as a fallback)
+      return "https://home.stanbrook.me";
+    },
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowHeaders: ["Authorization", "Content-Type"],
     exposeHeaders: ["HX-Trigger", "HX-Redirect", "HX-Push-Url"],

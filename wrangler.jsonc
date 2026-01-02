@@ -16,30 +16,57 @@
     }
   ],
   "vars": {
-    "ENVIRONMENT": "production",
+    // --- SECRETS & KEYS ---
+    "JWT_SECRET": "secret",
+    "GOOGLE_MAPS_API_KEY": "AIzaSyBarZdC3dMBHljW24FAJkDMvDNWkCZ6Byo",
 
-    "RP_NAME": "Jared Stanbrook Portfolio",
-    "RP_ID": "jared.stanbrook.me",
-    "ORIGIN": "https://jared.stanbrook.me",
+    // --- CORE AUTH ---
+    "AUTH_METHODS": "passkey,password,totp,pin",
+    "SESSION_DURATION": "86400000",
+    "SESSION_RENEWAL_THRESHOLD": "3600000",
+    "MAX_SESSIONS_PER_USER": "5",
 
-    "AUTH_METHODS": "passkey,password, totp",
-    "ALLOWED_EMAILS": "jared.stanbrook@proton.me, alex.pbessell@outlook.com",
+    // --- SECURITY ---
+    "MAX_FAILED_LOGIN_ATTEMPTS": "5",
+    "LOCKOUT_DURATION": "900000",
+    "REQUIRE_EMAIL_VERIFICATION": "false",
+    "REQUIRE_PHONE_VERIFICATION": "false",
+    "ALLOWED_EMAILS": "", // Leave empty or remove to allow open registration
 
-    "SESSION_DURATION": 86400000,
-    "SESSION_RENEWAL_THRESHOLD": 3600000,
-    "MAX_SESSIONS_PER_USER": 5,
-
-    "MAX_FAILED_LOGIN_ATTEMPTS": 5,
-    "LOCKOUT_DURATION": 900000,
-
-    "ROLES_AVAILABLE": "user,editor,admin",
-    "ROLES_DEFAULT": "user",
+    // --- ROLES & PERMISSIONS ---
+    "ROLES_AVAILABLE": "tenant,landlord,admin",
+    "ROLES_DEFAULT": "tenant",
     "ROLES_RESTRICTED": "admin",
     "PERMISSIONS_AVAILABLE": "blogs.create,blogs.read,blogs.update,blogs.delete,blogs.update.any,blogs.delete.any",
-    "ROLES_INHERENT": "user:blogs.read,blogs.create,blogs.update;editor:blogs.read,blogs.create,blogs.update.any;admin:*",
+    "ROLES_INHERENT": "tenant:blogs.read,blogs.create,blogs.update.any;admin:*",
 
-    "REQUIRE_EMAIL_VERIFICATION": "false",
-    "REQUIRE_PHONE_VERIFICATION": "false"
+    // --- PASSKEY / WEBAUTHN (CRITICAL FOR PROD) ---
+    // Must match the domain in your 'routes' section above
+    "RP_NAME": "Tenant System",
+    "RP_ID": "jaredstanbrook.com",
+    "ORIGIN": "https://home.jaredstanbrook.com",
+
+    // --- PASSWORD CONFIG ---
+    "PASSWORD_MIN_LENGTH": "8",
+    "PASSWORD_REQUIRE_UPPERCASE": "true",
+    "PASSWORD_REQUIRE_LOWERCASE": "true",
+    "PASSWORD_REQUIRE_NUMBERS": "true",
+    "PASSWORD_REQUIRE_SPECIAL": "true",
+
+    // --- PIN CONFIG ---
+    "PIN_LENGTH": "6",
+    "PIN_NUMBERS_ONLY": "true",
+
+    // --- TOTP CONFIG ---
+    "TOTP_ISSUER": "TenantSystem",
+    "TOTP_ALGORITHM": "SHA1",
+    "TOTP_DIGITS": "6",
+    "TOTP_PERIOD": "30",
+
+    // --- EMAIL / SMS ---
+    "SMTP_HOST": "smtp.gmail.com",
+    "SMTP_PORT": "587",
+    "SMS_PROVIDER_API_KEY": "mock_key"
   },
   "ratelimits": [
     {

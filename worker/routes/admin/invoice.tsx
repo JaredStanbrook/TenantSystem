@@ -14,12 +14,7 @@ import { AssignTenantModal } from "@views/invoices/InvoiceComponents";
 import type { AppEnv } from "@server/types";
 
 // UI Components
-import {
-  InvoiceTable,
-  InvoiceForm,
-  TenantSection,
-  TenantRow,
-} from "@views/invoices/InvoiceComponents";
+import { InvoiceTable, InvoiceForm } from "@views/invoices/InvoiceComponents";
 import {
   htmxResponse,
   htmxToast,

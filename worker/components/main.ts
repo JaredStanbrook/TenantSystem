@@ -1,7 +1,15 @@
+import "../index.css";
 import "./ui/AppToaster";
 import "./ui/ThemeProvider";
 import "./ui/ThemeToggle";
 import "./ui/NavUserMenu";
+import "./ui/JoinComponent";
+import "./ui/PropertySelector";
+
+import "./auth/AuthRegister";
+import "./auth/AuthLogin";
+import "./auth/TotpSetupButton";
+import "./auth/TotpVerifyModal";
 
 declare global {
   interface Window {

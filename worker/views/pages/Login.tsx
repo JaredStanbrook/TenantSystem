@@ -231,19 +231,6 @@ export const Login: FC<LoginProps> = (props) => {
             Create Account
           </a>
         </p>
-
-        <script
-          type="module"
-          src={
-            import.meta.env.PROD ? "/static/AuthLogin.js" : "/worker/components/auth/AuthLogin.ts"
-          }></script>
-        <script
-          type="module"
-          src={
-            import.meta.env.PROD
-              ? "/static/TotpVerifyModal.js"
-              : "/worker/components/auth/TotpVerifyModal.ts"
-          }></script>
       </div>
     </div>
   );

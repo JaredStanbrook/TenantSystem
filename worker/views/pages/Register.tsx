@@ -298,14 +298,6 @@ export const Register: FC<RegisterProps> = (props) => {
             Sign In
           </a>
         </p>
-
-        <script
-          type="module"
-          src={
-            import.meta.env.PROD
-              ? "/static/AuthRegister.js"
-              : "/worker/components/auth/AuthRegister.ts"
-          }></script>
       </div>
     </div>
   );
