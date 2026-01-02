@@ -9,6 +9,7 @@ import { JoinPage } from "./views/pages/Join.tsx";
 
 import { apiAuth } from "./routes/api/auth";
 import { webAuth } from "./routes/web/auth";
+import { expenseRoute } from "./routes/tenant/expense.tsx";
 
 import type { AppEnv } from "./types";
 import { propertyRoute } from "./routes/admin/property.tsx";
@@ -46,7 +47,7 @@ const app = new Hono<AppEnv>()
 
   // Public Web Auth routes (Login, Register, etc.)
   .route("/", webAuth)
-
+  .route("/expense", expenseRoute) // Singular to match NavBar
   // Public Join Page
   .get("/join", (c) => {
     return c.render(<JoinPage />, {

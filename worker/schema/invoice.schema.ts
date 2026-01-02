@@ -15,6 +15,15 @@ export const INVOICE_TYPE_VALUES = [
   "other",
 ] as const;
 
+export const INVOICE_STATUS_VALUES = [
+  "draft",
+  "open",
+  "partial",
+  "paid",
+  "overdue",
+  "void",
+] as const;
+
 export const invoice = sqliteTable("invoice", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   propertyId: integer("property_id")
@@ -26,10 +35,13 @@ export const invoice = sqliteTable("invoice", {
     enum: INVOICE_TYPE_VALUES,
   }).notNull(),
 
-  description: text("description"), // e.g. "Cycle 2 Water Bill"
+  description: text("description"),
 
   // Amounts (Always in Cents)
   totalAmount: integer("total_amount").notNull(),
+
+  // Status
+  status: text("status", { enum: INVOICE_STATUS_VALUES }).default("open").notNull(),
 
   // Dates
   dueDate: integer("due_date", { mode: "timestamp" }).notNull(),

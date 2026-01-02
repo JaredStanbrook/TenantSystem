@@ -1,6 +1,6 @@
-// worker/schema/invoice_payment.schema.ts
+// worker/schema/invoicePayment.schema.ts
 import { integer, text, sqliteTable } from "drizzle-orm/sqlite-core";
-import { createInsertSchema } from "drizzle-zod";
+import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { users } from "./auth.schema";
@@ -14,18 +14,38 @@ export const invoicePayment = sqliteTable("invoice_payment", {
     .references(() => invoice.id, { onDelete: "cascade" }),
   userId: text("user_id")
     .notNull()
-    .references(() => users.id), // The tenant paying
+    .references(() => users.id),
 
-  // The split logic
-  amountOwed: integer("amount_owed").notNull(), // How much THIS user owes of the total invoice
+  // Financials
+  amountOwed: integer("amount_owed").notNull(),
   amountPaid: integer("amount_paid").default(0).notNull(),
 
-  // State
+  // Authoritative Status
   status: text("status", { enum: ["pending", "partial", "paid", "overdue"] })
     .default("pending")
     .notNull(),
 
-  paidAt: integer("paid_at", { mode: "timestamp" }), // Null until paid
+  paidAt: integer("paid_at", { mode: "timestamp" }),
+
+  // --- Tenant Interactions ---
+  tenantMarkedPaidAt: integer("tenant_marked_paid_at", { mode: "timestamp" }),
+  paymentReference: text("payment_reference"), // Receipt/Ref
+
+  // Extensions
+  extensionStatus: text("extension_status", {
+    enum: ["none", "pending", "approved", "rejected"],
+  })
+    .default("none")
+    .notNull(),
+
+  extensionRequestedDate: integer("extension_requested_date", { mode: "timestamp" }),
+  extensionReason: text("extension_reason"),
+
+  // Authoritative Extension (set by Admin)
+  dueDateExtensionDays: integer("due_date_extension_days").default(0),
+
+  // Admin Feedback
+  adminNote: text("admin_note"),
 
   updatedAt: integer("updated_at", { mode: "timestamp" })
     .default(sql`(unixepoch())`)
@@ -34,7 +54,16 @@ export const invoicePayment = sqliteTable("invoice_payment", {
 });
 
 // --- Zod Schemas ---
-export const insertInvoicePaymentSchema = createInsertSchema(invoicePayment, {
-  amountOwed: z.coerce.number(),
-  amountPaid: z.coerce.number(),
+export const insertInvoicePaymentSchema = createInsertSchema(invoicePayment);
+export const selectInvoicePaymentSchema = createSelectSchema(invoicePayment);
+
+// Form Schemas for Actions
+export const markPaidSchema = z.object({
+  reference: z.string().optional(),
 });
+
+export const extensionRequestSchema = z.object({
+  requestedDate: z.coerce.date(),
+  reason: z.string().optional(),
+});
+export type InvoicePayment = z.infer<typeof insertInvoicePaymentSchema>;
