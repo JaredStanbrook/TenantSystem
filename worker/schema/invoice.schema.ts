@@ -5,6 +5,16 @@ import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { property } from "./property.schema";
 
+export const INVOICE_TYPE_VALUES = [
+  "rent",
+  "water",
+  "electricity",
+  "gas",
+  "internet",
+  "maintenance",
+  "other",
+] as const;
+
 export const invoice = sqliteTable("invoice", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   propertyId: integer("property_id")
@@ -13,7 +23,7 @@ export const invoice = sqliteTable("invoice", {
 
   // Bill Details
   type: text("type", {
-    enum: ["rent", "water", "electricity", "gas", "internet", "maintenance", "other"],
+    enum: INVOICE_TYPE_VALUES,
   }).notNull(),
 
   description: text("description"), // e.g. "Cycle 2 Water Bill"

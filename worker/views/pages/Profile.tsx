@@ -3,8 +3,13 @@ import type { SafeUser } from "../../schema/auth.schema";
 import { Icon } from "../components/Icon";
 import { User, BadgeX, BadgeCheck } from "lucide";
 import { type AuthConfig } from "@server/config/auth.config";
-import { capitalize } from "../lib/utils";
+import { capitalize, StatusBadge } from "../lib/utils";
 
+const styles: Record<string, string> = {
+  tenant: "bg-blue-100 text-blue-800 border-blue-200",
+  landlord: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  admin: "bg-purple-100 text-purple-800 border-purple-200",
+};
 export interface ProfileProps {
   user: SafeUser;
   config: AuthConfig;
@@ -76,17 +81,9 @@ export const ProfilePage: FC<ProfileProps> = (props) => {
               </label>
               <div class="flex items-center gap-2">
                 <span>{props.user.email}</span>
-                {props.user.emailVerified ? (
-                  <div class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors border-transparent bg-green-50 text-green-600 hover:bg-green-50/80">
-                    <Icon icon={BadgeCheck} class="h-3 w-3" />
-                    Verified
-                  </div>
-                ) : (
-                  <div class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors border-input bg-background text-amber-600 hover:bg-accent hover:text-accent-foreground">
-                    <Icon icon={BadgeX} class="h-3 w-3" />
-                    Unverified
-                  </div>
-                )}
+                {props.user.emailVerified
+                  ? StatusBadge("verified", styles, "badge-check")
+                  : StatusBadge("unverified", styles, "badge-x")}
               </div>
             </div>
 
@@ -105,14 +102,7 @@ export const ProfilePage: FC<ProfileProps> = (props) => {
               <div class="flex flex-wrap gap-2 mt-1">
                 {(Array.isArray(props.user.roles) ? props.user.roles : [props.user.roles]).map(
                   (role: string) => (
-                    <div
-                      class={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors border-transparent ${
-                        role === "admin"
-                          ? "bg-primary text-primary-foreground shadow hover:bg-primary/80"
-                          : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
-                      }`}>
-                      {capitalize(role)}
-                    </div>
+                    <div>{StatusBadge(role, styles)}</div>
                   )
                 )}
               </div>

@@ -71,6 +71,7 @@ propertyRoute.post(
       // Re-render form with errors
       const fieldErrors = result.error.flatten().fieldErrors;
       const rawBody = await c.req.parseBody();
+      console.log("Validation errors:", fieldErrors);
       htmxToast(c, "Validation Failed", {
         description: "Please check the form for errors.",
         type: "error",
@@ -169,7 +170,6 @@ propertyRoute.post(
       const id = c.req.param("id");
       const fieldErrors = result.error.flatten().fieldErrors;
       const rawBody = await c.req.parseBody();
-
       htmxToast(c, "Update Failed", { type: "error" });
 
       return htmxResponse(

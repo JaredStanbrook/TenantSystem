@@ -8,49 +8,57 @@ import { ProfilePage } from "./views/pages/Profile";
 import { JoinPage } from "./views/pages/Join.tsx";
 
 import { apiAuth } from "./routes/api/auth";
-/*
-import { apiExpense } from "./routes/api/expense";
-import { apiBill } from "./routes/api/bill";
-import { apiProperty } from "./routes/api/property";
-import { apiUserProperty } from "./routes/api/userProperty";
-import { apiWaitlist } from "./routes/api/waitlist";
-*/
 import { webAuth } from "./routes/web/auth";
-/*
-import { webExpense } from "./routes/web/expense";
-import { webBill } from "./routes/web/bill";
-import { webProperty } from "./routes/web/property";
-import { webUserProperty } from "./routes/web/userProperty";
-import { webBaitlist } from "./routes/web/waitlist";
-*/
 
 import type { AppEnv } from "./types";
 import { propertyRoute } from "./routes/admin/property.tsx";
 import { SafeUser } from "./schema/auth.schema.ts";
 import { invoiceRoute } from "./routes/admin/invoice.tsx";
 import { tenancyRoute } from "./routes/admin/tenancy.tsx";
-import { flashToast } from "./lib/htmx-helpers.ts";
 import { roomRoute } from "./routes/admin/room.ts";
+import { dashboardRoute } from "./routes/admin/dashboard.tsx";
+import { requireUser, requireRole } from "./middleware/guard.middleware.ts";
 
+// ==========================================
+// 1. ADMIN SUB-APP (Protected by RBAC)
+// ==========================================
 const admin = new Hono<AppEnv>();
+
+// CRITICAL: Restrict this entire router to only 'admin' or 'landlord' roles.
+// Tenants will be rejected (redirected or 403 based on your middleware logic).
+admin.use("*", requireRole("admin", "landlord"));
+
+admin.route("/", dashboardRoute);
 admin.route("/properties", propertyRoute);
 admin.route("/invoices", invoiceRoute);
 admin.route("/tenancies", tenancyRoute);
 admin.route("/rooms", roomRoute);
 
+// ==========================================
+// 2. MAIN APP
+// ==========================================
 const app = new Hono<AppEnv>()
+  // Global renderer (HTMX layout wrapper)
   .use("*", globalRenderer)
 
+  // Mount the protected admin router
   .route("/admin", admin)
+
+  // Public Web Auth routes (Login, Register, etc.)
   .route("/", webAuth)
+
+  // Public Join Page
   .get("/join", (c) => {
     return c.render(<JoinPage />, {
       title: "Join",
     });
   })
-  .get("/profile", (c) => {
+
+  // Protected Profile Page (Any logged-in user can see their own profile)
+  .get("/profile", requireUser, (c) => {
     const { auth } = c.var;
 
+    // We can safely cast because 'requireUser' guarantees auth.user exists
     const props = {
       user: auth.user as SafeUser,
       config: c.var.authConfig,
@@ -59,14 +67,21 @@ const app = new Hono<AppEnv>()
       title: "Profile",
     });
   })
+
+  // ==========================================
+  // 3. CONTEXT SWITCHING (Protected)
+  // ==========================================
+  // Only Landlords/Admins should be able to "select" a property to manage.
+  // Tenants usually have a fixed assignment, so they shouldn't trigger this.
   .post(
     "/session/property",
+    requireRole("admin", "landlord"), // <--- Added Security
     zValidator("form", z.object({ propertyId: z.string() })),
     async (c) => {
       const { propertyId } = c.req.valid("form");
 
       if (propertyId === "all") {
-        // Logic for "View All" - remove the filter
+        // "View All" - remove the filter
         deleteCookie(c, "selected_property_id");
       } else {
         // Set the specific property ID in a secure cookie
@@ -79,23 +94,18 @@ const app = new Hono<AppEnv>()
         });
       }
 
+      // HTMX specific header to force a client-side page refresh
+      // so the new cookie takes effect on the UI
       c.header("HX-Refresh", "true");
       return c.body(null);
     }
   )
-  /*
-  .route("/bills", billRoute)
-  .route("/user-properties", userPropertyRoute)
-  .route("/waitlist", waitlistRoute)
-  */
+
+  // ==========================================
+  // 4. API ROUTES
+  // ==========================================
   .basePath("/api")
   .route("/auth", apiAuth);
-/*
-  .route("/expenses", apiExpense)
-  .route("/bills", billRoute)
-  .route("/properties", propertyRoute)
-  .route("/user-properties", userPropertyRoute)
-  .route("/waitlist", waitlistRoute);
-  */
+
 export type AppType = typeof app;
 export default app;

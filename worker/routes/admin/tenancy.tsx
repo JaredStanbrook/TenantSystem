@@ -28,6 +28,24 @@ const statusUpdateSchema = z.object({
 });
 
 // --- 1. GET /admin/tenancies (List with Room Info) ---
+tenancyRoute.get("/test", async (c) => {
+  const db = c.var.db;
+
+  const results = await db
+    .select({
+      tenancy: tenancy,
+      user: users,
+      property: property,
+      room: room, // Join Room Data
+    })
+    .from(tenancy)
+    .innerJoin(users, eq(tenancy.userId, users.id))
+    .innerJoin(property, eq(tenancy.propertyId, property.id))
+    .leftJoin(room, eq(tenancy.roomId, room.id))
+    .orderBy(desc(tenancy.startDate));
+
+  return c.json(results);
+});
 
 tenancyRoute.get("/", async (c) => {
   const db = c.var.db;
@@ -140,59 +158,111 @@ tenancyRoute.get("/rooms-select", async (c) => {
   `);
 });
 
-// --- 4. POST /admin/tenancies (Create with Room Sync) ---
+// --- 4. POST /admin/tenancies (Create with D1 Batch) ---
 tenancyRoute.post("/", zValidator("form", createTenancyFormSchema), async (c) => {
   const db = c.var.db;
   const data = c.req.valid("form");
   const landlordId = c.var.auth.user!.id;
 
-  // A. Verify Property Ownership
-  const [prop] = await db
-    .select()
-    .from(property)
-    .where(and(eq(property.id, data.propertyId), eq(property.landlordId, landlordId)));
-
-  if (!prop) return c.text("Unauthorized property", 403);
-
-  // B. Find User
-  const [targetUser] = await db.select().from(users).where(eq(users.email, data.email));
-
-  // If user not found, return form with error (omitted for brevity, assume similar to before)
-  if (!targetUser) {
-    htmxToast(c, "User Not Found", { type: "error" });
+  // Helper to re-render form with errors
+  const renderError = async (message: string, field?: "email" | "roomId") => {
     const myProperties = await db
       .select()
       .from(property)
       .where(eq(property.landlordId, landlordId));
+
+    // Re-fetch rooms if property was selected
+    const currentRooms = await db
+      .select()
+      .from(room)
+      .where(
+        and(
+          eq(room.propertyId, data.propertyId),
+          or(eq(room.status, "vacant_ready"), eq(room.status, "advertised"))
+        )
+      );
+
+    htmxToast(c, message, { type: "error" });
     return htmxResponse(
       c,
       "Add Tenancy",
       TenancyForm({
         properties: myProperties,
+        rooms: currentRooms,
         action: "/admin/tenancies",
         emailValue: data.email,
-        errors: { email: ["User not found."] },
+        errors: field ? { [field]: [message] } : undefined,
       })
     );
-  }
-  db.insert(tenancy).values({
-    propertyId: data.propertyId,
-    roomId: data.roomId,
-    startDate: data.startDate,
-    endDate: data.endDate,
-    bondAmount: data.bondAmount,
-    // Server-controlled fields:
-    userId: targetUser.id,
-    status: "pending_agreement",
-  });
+  };
 
-  // 2. Prepare Room Update (Only if a room was selected)
-  if (data.roomId) {
-    db.update(room).set({ status: "prospective" }).where(eq(room.id, data.roomId));
-  }
+  try {
+    // 1. Validation Phase (Reads)
 
-  flashToast(c, "Tenancy Initiated", { type: "success" });
-  return htmxRedirect(c, "/admin/tenancies");
+    // A. Verify Property Ownership
+    const [prop] = await db
+      .select()
+      .from(property)
+      .where(and(eq(property.id, data.propertyId), eq(property.landlordId, landlordId)));
+
+    if (!prop) return c.text("Unauthorized property", 403);
+
+    // B. Find Target User
+    const [targetUser] = await db.select().from(users).where(eq(users.email, data.email));
+    if (!targetUser) return renderError("User not found.", "email");
+
+    // C. Validate Room Availability (Backend Check)
+    if (data.roomId) {
+      const [targetRoom] = await db
+        .select()
+        .from(room)
+        .where(and(eq(room.id, data.roomId), eq(room.propertyId, data.propertyId)));
+
+      if (!targetRoom) {
+        return renderError("Room does not exist on this property.", "roomId");
+      }
+
+      const validStatuses = ["vacant_ready", "advertised", "vacant_maintenance"];
+      if (!validStatuses.includes(targetRoom.status)) {
+        return renderError(
+          `Room is currently ${targetRoom.status.replace("_", " ")} and cannot receive a tenant.`,
+          "roomId"
+        );
+      }
+    }
+
+    // 2. Execution Phase (Batch Writes)
+    const batchStatements = [];
+
+    // Statement 1: Insert Tenancy
+    batchStatements.push(
+      db.insert(tenancy).values({
+        propertyId: data.propertyId,
+        roomId: data.roomId,
+        startDate: data.startDate,
+        endDate: data.endDate,
+        bondAmount: data.bondAmount,
+        userId: targetUser.id,
+        status: "pending_agreement",
+      })
+    );
+
+    // Statement 2: Update Room Status (Conditional)
+    if (data.roomId) {
+      batchStatements.push(
+        db.update(room).set({ status: "prospective" }).where(eq(room.id, data.roomId))
+      );
+    }
+
+    // Execute atomically
+    await db.batch(batchStatements as [any, ...any[]]);
+
+    flashToast(c, "Tenancy Initiated", { type: "success" });
+    return htmxRedirect(c, "/admin/tenancies");
+  } catch (error: any) {
+    console.error("Tenancy creation failed:", error);
+    return renderError("An unexpected error occurred. Please try again.");
+  }
 });
 
 // --- 5. GET /admin/tenancies/:id/edit ---

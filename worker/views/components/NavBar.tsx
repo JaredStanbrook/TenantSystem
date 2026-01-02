@@ -8,7 +8,6 @@ const menuConfig: Record<string, Array<{ to: string; name: string }>> = {
   tenant: [
     { to: "/expense", name: "Expenses" },
     { to: "/bill", name: "My Bills" },
-    { to: "/profile", name: "Profile" },
   ],
   landlord: [
     { to: "/admin", name: "Dashboard" },

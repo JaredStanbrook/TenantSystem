@@ -1,6 +1,17 @@
 import { html } from "hono/html";
-import { type SafeRoom } from "@server/schema/room.schema";
-import { capitalize } from "../lib/utils";
+import { ROOM_STATUS_VALUES, type SafeRoom } from "@server/schema/room.schema";
+import { capitalize, StatusBadge } from "../lib/utils";
+
+const roomStyles: Record<string, string> = {
+  occupied: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  vacant_ready: "bg-blue-100 text-blue-800 border-blue-200",
+  prospective: "bg-yellow-100 text-yellow-800 border-yellow-200",
+  advertised: "bg-purple-100 text-purple-800 border-purple-200",
+  vacant_maintenance: "bg-amber-100 text-amber-800 border-amber-200",
+  under_repair: "bg-red-100 text-red-800 border-red-200",
+  notice_given: "bg-rose-100 text-rose-800 border-rose-200",
+  closed: "bg-gray-100 text-gray-600 border-gray-200",
+};
 
 // --- 1. Room Table Row ---
 export const RoomRow = ({ room }: { room: SafeRoom & { baseRentAmount?: number | null } }) => html`
@@ -13,19 +24,7 @@ export const RoomRow = ({ room }: { room: SafeRoom & { baseRentAmount?: number |
         ${room.name}
       </div>
     </td>
-    <td class="p-4 align-middle">
-      <span
-        class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors
-        ${room.status === "occupied"
-          ? "border-transparent bg-green-500/15 text-green-700"
-          : room.status === "vacant_ready"
-          ? "border-transparent bg-blue-500/15 text-blue-700"
-          : room.status === "under_repair"
-          ? "border-transparent bg-red-500/15 text-red-700"
-          : "border-transparent bg-secondary text-secondary-foreground"}">
-        ${capitalize(room.status.replace("_", " "))}
-      </span>
-    </td>
+    <td class="p-4 align-middle">${StatusBadge(room.status, roomStyles)}</td>
     <td class="p-4 align-middle text-muted-foreground">
       ${room.baseRentAmount ? `$${room.baseRentAmount}` : "—"}
     </td>
@@ -52,58 +51,54 @@ export const RoomTable = ({
   propertyName: string;
   propertyId: number;
 }) => html`
-  <div class="max-w-5xl pb-4 mx-auto pt-18">
-    <div class="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-      <div class="flex items-center justify-between">
-        <div>
-          <div class="flex items-center gap-2 text-muted-foreground mb-1">
-            <i data-lucide="building-2" class="w-4 h-4"></i>
-            <span>${propertyName}</span>
-          </div>
-          <h2 class="text-3xl font-bold tracking-tight">Room Management</h2>
-          <p class="text-muted-foreground">Managing ${rooms.length} rooms for this property.</p>
+  <div class="max-w-7xl mx-auto space-y-8 p-8 pt-20 animate-in fade-in duration-500">
+    <div class="flex items-center justify-between">
+      <div>
+        <div class="flex items-center gap-2 text-muted-foreground mb-1">
+          <i data-lucide="building-2" class="w-4 h-4"></i>
+          <span>${propertyName}</span>
         </div>
-        <button
-          hx-get="/admin/properties"
-          hx-target="#main-content"
-          hx-swap="innerHTML"
-          hx-push-url="true"
-          class="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors border px-3 py-2 rounded-lg bg-background hover:bg-accent">
-          <i data-lucide="arrow-left" class="w-4 h-4"></i>
-          Back to Properties
-        </button>
+        <h2 class="text-3xl font-bold tracking-tight">Room Management</h2>
+        <p class="text-muted-foreground">Managing ${rooms.length} rooms for this property.</p>
       </div>
+      <button
+        hx-get="/admin/properties"
+        hx-target="#main-content"
+        hx-swap="innerHTML"
+        hx-push-url="true"
+        class="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors border px-3 py-2 rounded-lg bg-background hover:bg-accent">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        Back to Properties
+      </button>
+    </div>
 
-      <div class="rounded-lg border bg-card shadow-sm overflow-hidden">
-        <div class="relative w-full overflow-auto">
-          <table class="w-full caption-bottom text-sm">
-            <thead class="[&_tr]:border-b bg-muted/50">
-              <tr class="border-b transition-colors">
-                <th class="h-12 px-4 text-left align-middle font-semibold text-muted-foreground">
-                  Room Name
-                </th>
-                <th class="h-12 px-4 text-left align-middle font-semibold text-muted-foreground">
-                  Status
-                </th>
-                <th class="h-12 px-4 text-left align-middle font-semibold text-muted-foreground">
-                  Base Rent
-                </th>
-                <th class="h-12 px-4 text-right align-middle font-semibold text-muted-foreground">
-                  Manage
-                </th>
-              </tr>
-            </thead>
-            <tbody class="[&_tr:last-child]:border-0">
-              ${rooms.length === 0
-                ? html`<tr>
-                    <td colspan="4" class="p-8 text-center text-muted-foreground">
-                      No rooms found.
-                    </td>
-                  </tr>`
-                : rooms.map((r) => RoomRow({ room: r }))}
-            </tbody>
-          </table>
-        </div>
+    <div class="rounded-lg border bg-card shadow-sm overflow-hidden">
+      <div class="relative w-full overflow-auto">
+        <table class="w-full caption-bottom text-sm">
+          <thead class="[&_tr]:border-b bg-muted/50">
+            <tr class="border-b transition-colors">
+              <th class="h-12 px-4 text-left align-middle font-semibold text-muted-foreground">
+                Room Name
+              </th>
+              <th class="h-12 px-4 text-left align-middle font-semibold text-muted-foreground">
+                Status
+              </th>
+              <th class="h-12 px-4 text-left align-middle font-semibold text-muted-foreground">
+                Base Rent
+              </th>
+              <th class="h-12 px-4 text-right align-middle font-semibold text-muted-foreground">
+                Manage
+              </th>
+            </tr>
+          </thead>
+          <tbody class="[&_tr:last-child]:border-0">
+            ${rooms.length === 0
+              ? html`<tr>
+                  <td colspan="4" class="p-8 text-center text-muted-foreground">No rooms found.</td>
+                </tr>`
+              : rooms.map((r) => RoomRow({ room: r }))}
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -111,8 +106,8 @@ export const RoomTable = ({
 
 // --- 3. Room Edit Form ---
 export const RoomForm = ({ room, action }: { room: any; action: string }) => html`
-  <div class="max-w-2xl mx-auto pt-18">
-    <div class="border rounded-lg shadow-sm bg-card animate-in zoom-in-95 duration-200">
+  <div class="max-w-7xl mx-auto space-y-8 p-8 pt-20 animate-in fade-in duration-500">
+    <div class="border rounded-lg shadow-sm bg-card">
       <div class="p-6 border-b">
         <h3 class="text-2xl font-semibold">Edit ${room.name}</h3>
         <p class="text-sm text-muted-foreground">Update status and pricing details.</p>
@@ -133,7 +128,7 @@ export const RoomForm = ({ room, action }: { room: any; action: string }) => htm
           <select
             name="status"
             class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-            ${["vacant_ready", "vacant_maintenance", "advertised", "occupied", "under_repair"].map(
+            ${ROOM_STATUS_VALUES.map(
               (s) => html`
                 <option value="${s}" ${room.status === s ? "selected" : ""}>
                   ${capitalize(s.replace("_", " "))}

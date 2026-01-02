@@ -61,6 +61,7 @@ export const PropertyRow = ({ prop }: { prop: Property }) => html`
 `;
 
 // --- 2. Property Form (Create & Edit) ---
+// --- 2. Property Form (Create & Edit) ---
 export const PropertyForm = ({
   prop,
   action,
@@ -70,7 +71,7 @@ export const PropertyForm = ({
   action: string;
   errors?: Record<string, string[]>;
 }) => html`
-  <div class="max-w-7xl pb-4 mx-auto pt-18">
+  <div class="max-w-7xl mx-auto space-y-8 p-8 pt-20 animate-in fade-in duration-500">
     <div class="space-y-4 animate-in fade-in duration-300">
       <div class="flex items-center justify-between">
         <div>
@@ -98,6 +99,7 @@ export const PropertyForm = ({
             <input
               name="nickname"
               value="${prop?.nickname || ""}"
+              placeholder="e.g. The Beach House"
               class="flex h-10 w-full rounded-lg border border-input px-3" />
           </div>
           <div class="space-y-2">
@@ -105,10 +107,10 @@ export const PropertyForm = ({
             <select
               name="propertyType"
               class="flex h-10 w-full rounded-lg border border-input px-3">
-              ${["house", "apartment", "unit", "studio"].map(
+              ${["house", "apartment", "unit", "studio", "townhouse"].map(
                 (t) =>
                   html`<option value="${t}" ${prop?.propertyType === t ? "selected" : ""}>
-                    ${t}
+                    ${t.charAt(0).toUpperCase() + t.slice(1)}
                   </option>`
               )}
             </select>
@@ -122,18 +124,24 @@ export const PropertyForm = ({
 
           <div class="grid gap-4">
             <div class="space-y-2">
-              <label class="text-sm font-medium leading-none">
+              <label class="text-sm font-medium text-muted-foreground">
+                Auto-fill from Google Maps
+              </label>
+              <div id="google-search-container" class="w-full"></div>
+            </div>
+
+            <div class="space-y-2">
+              <label class="text-sm font-medium">
                 Address Line 1 <span class="text-destructive">*</span>
               </label>
-
-              <div id="google-autocomplete-container" class="w-full"></div>
-
               <input
-                type="hidden"
-                id="address-hidden-input"
+                type="text"
+                id="address-line-1"
                 name="addressLine1"
-                value="${prop?.addressLine1 || ""}" />
-
+                value="${prop?.addressLine1 || ""}"
+                class="flex h-10 w-full rounded-lg border border-input px-3"
+                placeholder="Street Number and Name"
+                required />
               ${errors.addressLine1
                 ? html`<p class="text-sm text-destructive">${errors.addressLine1[0]}</p>`
                 : ""}
@@ -147,7 +155,7 @@ export const PropertyForm = ({
                   name="city"
                   value="${prop?.city || ""}"
                   required
-                  class="flex h-10 w-full rounded-lg border border-input px-3" />
+                  class="flex h-10 w-full rounded-lg border border-input px-3 bg-muted/20" />
               </div>
               <div class="space-y-2">
                 <label class="text-sm font-medium">State</label>
@@ -156,7 +164,7 @@ export const PropertyForm = ({
                   name="state"
                   value="${prop?.state || ""}"
                   required
-                  class="flex h-10 w-full rounded-lg border border-input px-3" />
+                  class="flex h-10 w-full rounded-lg border border-input px-3 bg-muted/20" />
               </div>
               <div class="space-y-2">
                 <label class="text-sm font-medium">Postcode</label>
@@ -165,7 +173,7 @@ export const PropertyForm = ({
                   name="postcode"
                   value="${prop?.postcode || ""}"
                   required
-                  class="flex h-10 w-full rounded-lg border border-input px-3" />
+                  class="flex h-10 w-full rounded-lg border border-input px-3 bg-muted/20" />
               </div>
               <div class="space-y-2">
                 <label class="text-sm font-medium">Country</label>
@@ -173,14 +181,93 @@ export const PropertyForm = ({
                   id="country-input"
                   name="country"
                   value="${prop?.country || "Australia"}"
-                  class="flex h-10 w-full rounded-lg border border-input px-3" />
+                  class="flex h-10 w-full rounded-lg border border-input px-3 bg-muted/20" />
               </div>
             </div>
           </div>
         </div>
 
+        <div class="space-y-4">
+          <h3 class="text-lg font-semibold flex items-center gap-2">
+            <i data-lucide="home" class="w-5 h-5"></i>
+            Property Details
+          </h3>
+          <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div class="space-y-2">
+              <label class="text-sm font-medium leading-none flex items-center gap-1">
+                <i data-lucide="bed" class="w-4 h-4"></i>
+                Bedrooms <span class="text-destructive">*</span>
+              </label>
+              <input
+                type="number"
+                name="bedrooms"
+                value="${prop?.bedrooms ?? 1}"
+                min="0"
+                required
+                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+            </div>
+            <div class="space-y-2">
+              <label class="text-sm font-medium leading-none flex items-center gap-1">
+                <i data-lucide="bath" class="w-4 h-4"></i>
+                Bathrooms <span class="text-destructive">*</span>
+              </label>
+              <input
+                type="number"
+                name="bathrooms"
+                value="${prop?.bathrooms ?? 1}"
+                min="0"
+                step="0.5"
+                required
+                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+            </div>
+            <div class="space-y-2">
+              <label class="text-sm font-medium leading-none flex items-center gap-1">
+                <i data-lucide="car" class="w-4 h-4"></i>
+                Parking
+              </label>
+              <input
+                type="number"
+                name="parkingSpaces"
+                value="${prop?.parkingSpaces ?? 0}"
+                min="0"
+                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+            </div>
+          </div>
+          <div class="grid gap-4 md:grid-cols-2">
+            <div class="space-y-2">
+              <label class="text-sm font-medium">Rent Amount (Cents)</label>
+              <input
+                type="number"
+                name="rentAmount"
+                value="${prop?.rentAmount || ""}"
+                required
+                class="flex h-10 w-full rounded-lg border border-input px-3" />
+            </div>
+            <div class="space-y-2">
+              <label class="text-sm font-medium">Frequency</label>
+              <select
+                name="rentFrequency"
+                class="flex h-10 w-full rounded-lg border border-input px-3">
+                <option value="weekly" ${prop?.rentFrequency === "weekly" ? "selected" : ""}>
+                  Weekly
+                </option>
+                <option
+                  value="fortnightly"
+                  ${prop?.rentFrequency === "fortnightly" ? "selected" : ""}>
+                  Fortnightly
+                </option>
+                <option value="monthly" ${prop?.rentFrequency === "monthly" ? "selected" : ""}>
+                  Monthly
+                </option>
+              </select>
+            </div>
+          </div>
+        </div>
+
         <div class="flex justify-end gap-3 pt-4 border-t">
-          <button type="submit" class="bg-primary text-primary-foreground h-10 px-4 rounded-lg">
+          <button
+            type="submit"
+            class="bg-primary text-primary-foreground h-10 px-4 rounded-lg hover:bg-primary/90 transition-colors">
             Save Property
           </button>
         </div>
@@ -189,109 +276,125 @@ export const PropertyForm = ({
 
     <script>
       (function () {
-        // Use a slight delay to ensure HTMX swap is complete
-        setTimeout(async () => {
-          const container = document.getElementById("google-autocomplete-container");
-          const hiddenInput = document.getElementById("address-hidden-input");
+        // --- Variables ---
+        let placeAutocomplete;
+        let address1Field;
+        let cityField;
+        let stateField;
+        let postalField;
+        let countryField;
 
-          if (!container || !hiddenInput) return;
+        // --- 1. Init ---
+        async function initAutocomplete() {
+          const container = document.getElementById("google-search-container");
+          if (!container) return;
 
-          // 1. Import the specific library
-          // Ensure you catch errors if the API key is invalid or library is missing
-          let PlaceAutocompleteElement;
           try {
-            const placesLib = await google.maps.importLibrary("places");
-            PlaceAutocompleteElement = placesLib.PlaceAutocompleteElement;
-          } catch (e) {
-            console.error("Failed to load Google Maps Places library", e);
-            container.innerHTML =
-              '<input class="flex h-10 w-full rounded-lg border border-input px-3" placeholder="Manual entry (Map unavailable)" oninput="document.getElementById(\\'address-hidden-input\\').value = this.value">';
-            return;
-          }
+            const { PlaceAutocompleteElement } = await google.maps.importLibrary("places");
 
-          // 2. Instantiate the element
-          const autocomplete = new PlaceAutocompleteElement();
+            // Create Widget
+            placeAutocomplete = new PlaceAutocompleteElement();
+            placeAutocomplete.classList.add(
+              "flex",
+              "h-10",
+              "w-full",
+              "rounded-lg",
+              "border",
+              "border-input",
+              "bg-background",
+              "text-sm"
+            );
 
-          // 3. Configuration (Optional)
-          // autocomplete.componentRestrictions = { country: 'au' };
+            // Mount
+            container.innerHTML = "";
+            container.appendChild(placeAutocomplete);
 
-          // 4. Handle Styling
-          // The new element is a web component. You can add a class specifically for it
-          // defined in your global CSS, or accept the default Material look.
-          autocomplete.classList.add("w-full", "h-10", "block");
+            // Bind Fields
+            address1Field = document.getElementById("address-line-1"); // Standard text input
+            cityField = document.getElementById("city-input");
+            stateField = document.getElementById("state-input");
+            postalField = document.getElementById("postcode-input");
+            countryField = document.getElementById("country-input");
 
-          // 5. Append to DOM
-          container.innerHTML = ""; // Clear any previous content
-          container.appendChild(autocomplete);
-
-          // 6. Set Initial Value (if editing)
-          if (hiddenInput.value) {
-            // Note: The new API might not purely reflect text back into the input
-            // the same way a simple input value does, but we can try setting it.
-            // Often strictly used for search, but 'value' property exists on the element.
-            autocomplete.value = hiddenInput.value;
-          }
-
-          // 7. Listen for the new event: 'gmp-places-select'
-          autocomplete.addEventListener("gmp-places-select", async ({ place }) => {
-            // 'place' is a PlaceResult object.
-            // We might need to fetch fields if not automatically populated
-            await place.fetchFields({
-              fields: ["displayName", "formattedAddress", "addressComponents"],
+            // Listen for selection
+            placeAutocomplete.addEventListener("gmp-select", async ({ placePrediction }) => {
+              await fillInAddress(placePrediction);
             });
+          } catch (e) {
+            console.error("Google Places failed to load", e);
+            // If API fails, remove the search container so user just sees standard inputs
+            if (container) container.style.display = "none";
+          }
+        }
 
-            // Update the hidden input with the clean address
-            hiddenInput.value = place.formattedAddress || place.displayName;
+        // --- 2. Fill Logic ---
+        async function fillInAddress(placePrediction) {
+          if (!placePrediction) return;
 
-            // Reset other fields
-            document.getElementById("city-input").value = "";
-            document.getElementById("state-input").value = "";
-            document.getElementById("postcode-input").value = "";
-            document.getElementById("country-input").value = "";
-
-            let streetNumber = "";
-            let route = "";
-
-            // Map components
-            for (const component of place.addressComponents) {
-              const type = component.types[0];
-              switch (type) {
-                case "street_number":
-                  streetNumber = component.longText;
-                  break;
-                case "route":
-                  route = component.longText;
-                  break;
-                case "locality":
-                  document.getElementById("city-input").value = component.longText;
-                  break;
-                case "administrative_area_level_1":
-                  document.getElementById("state-input").value = component.shortText;
-                  break;
-                case "postal_code":
-                  document.getElementById("postcode-input").value = component.longText;
-                  break;
-                case "country":
-                  document.getElementById("country-input").value = component.longText;
-                  break;
-              }
-            }
-
-            // Sync Main Address line if you prefer strictly street + route
-            if (streetNumber || route) {
-              hiddenInput.value = [streetNumber, route].filter(Boolean).join(" ");
-            }
+          const place = placePrediction.toPlace();
+          await place.fetchFields({
+            fields: ["addressComponents", "formattedAddress", "displayName"],
           });
 
-          // 8. Sync manual typing (edge case)
-          // If the user types but doesn't select a prediction, the new element
-          // might not fire a select event. We need to capture the text value.
-          // The internal input is inside Shadow DOM, so standard 'input' events
-          // on the custom element usually bubble up.
-          autocomplete.addEventListener("input", (e) => {
-            hiddenInput.value = e.target.value;
-          });
-        }, 100);
+          if (!place.addressComponents) return;
+
+          let address1 = "";
+          let postcode = "";
+
+          // Clear previous values
+          if (cityField) cityField.value = "";
+          if (stateField) stateField.value = "";
+          if (postalField) postalField.value = "";
+          if (countryField) countryField.value = "";
+
+          for (const component of place.addressComponents) {
+            const types = component.types;
+
+            // Build Address Line 1
+            if (types.includes("street_number")) {
+              address1 = component.longText + " " + address1;
+            }
+            if (types.includes("route")) {
+              address1 += component.longText;
+            }
+
+            // City
+            if (types.includes("locality")) {
+              cityField.value = component.longText;
+            }
+            if (types.includes("sublocality_level_1") && !cityField.value) {
+              cityField.value = component.longText;
+            }
+
+            // State
+            if (types.includes("administrative_area_level_1")) {
+              stateField.value = component.shortText;
+            }
+
+            // Postcode
+            if (types.includes("postal_code")) {
+              postcode = component.longText;
+            }
+
+            // Country
+            if (types.includes("country")) {
+              countryField.value = component.longText;
+            }
+          }
+
+          // Populate Address Line 1
+          if (address1Field) {
+            address1Field.value = address1
+              ? address1.trim()
+              : place.formattedAddress?.split(",")[0] || "";
+          }
+          if (postalField) {
+            postalField.value = postcode;
+          }
+        }
+
+        // --- 3. Run ---
+        setTimeout(initAutocomplete, 50);
       })();
     </script>
   </div>
@@ -299,7 +402,7 @@ export const PropertyForm = ({
 
 // --- 3. Properties Table Layout ---
 export const PropertyTable = ({ properties }: { properties: Property[] }) => html`
-  <div class="max-w-7xl pb-4 mx-auto pt-18">
+  <div class="max-w-7xl mx-auto space-y-8 p-8 pt-20 animate-in fade-in duration-500">
     <div class="space-y-4 animate-in fade-in duration-300">
       <div class="flex items-center justify-between">
         <div>

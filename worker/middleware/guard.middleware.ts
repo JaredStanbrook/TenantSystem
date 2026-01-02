@@ -2,7 +2,24 @@
 import { createMiddleware } from "hono/factory";
 import type { AppEnv } from "../types"; // Import your Hono Env types
 import { HTTPException } from "hono/http-exception";
+import { htmxRedirect } from "@server/lib/htmx-helpers";
 
+export const requireUser = createMiddleware<AppEnv>(async (c, next) => {
+  const user = c.var.auth.user;
+
+  if (!user) {
+    // 1. If it's an HTMX request, we might want to trigger a client-side redirect
+    if (c.req.header("HX-Request")) {
+      htmxRedirect(c, "/login");
+      return c.text("Redirecting...", 401);
+    }
+
+    // 2. Standard browser request -> Redirect to login
+    return c.redirect("/login");
+  }
+
+  await next();
+});
 /**
  * Ensures the user is logged in and holds at least one of the required roles.
  * Usage: .use(requireRole("admin", "editor"))

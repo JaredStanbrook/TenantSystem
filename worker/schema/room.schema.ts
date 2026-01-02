@@ -4,26 +4,28 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { property } from "./property.schema";
 
+export const ROOM_STATUS_VALUES = [
+  "vacant_ready",
+  "vacant_maintenance",
+  "advertised",
+  "prospective",
+  "occupied",
+  "notice_given",
+  "under_repair",
+] as const;
+
 export const room = sqliteTable("room", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   propertyId: integer("property_id")
     .notNull()
-    .references(() => property.id),
+    .references(() => property.id, { onDelete: "cascade" }),
 
   name: text("name").notNull(), // e.g., "Room A", "Master Suite"
   description: text("description"),
 
   // Physical State of the Room
   status: text("status", {
-    enum: [
-      "vacant_ready",
-      "vacant_maintenance",
-      "advertised",
-      "prospective",
-      "occupied",
-      "notice_given",
-      "under_repair",
-    ],
+    enum: ROOM_STATUS_VALUES,
   })
     .default("vacant_ready")
     .notNull(),

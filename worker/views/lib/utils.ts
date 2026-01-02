@@ -5,15 +5,15 @@ export const capitalize = (str: string): string => {
   return str.charAt(0).toUpperCase() + str.slice(1);
 };
 
-export const StatusBadge = (status: string, styles: Record<string, string>) => {
+export const StatusBadge = (status: string, styles: Record<string, string>, iconName?: string) => {
   // Format label: "pending_agreement" -> "Pending Agreement"
   const label = status.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
-  const style = styles[status] || styles.closed;
+  const style = styles[status] || styles.closed || "bg-gray-100 text-gray-800 border-gray-200";
 
   return html`
     <span
       class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${style}">
-      ${label}
+      ${iconName ? html`<i data-lucide="${iconName}" class="w-3 h-3 mr-1.5"></i>` : ""} ${label}
     </span>
   `;
 };
