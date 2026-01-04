@@ -439,7 +439,7 @@ export const InvoiceRow = ({
 
           <div class="h-1.5 w-full bg-destructive rounded-full overflow-hidden">
             <div
-              class="h-full ${isFullyPaid ? "bg-green-500" : "bg-primary"} transition-all"
+              class="h-full ${isFullyPaid ? "bg-primary" : "bg-primary"} transition-all"
               style="width: ${percentage}%"></div>
           </div>
 

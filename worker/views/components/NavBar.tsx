@@ -1,8 +1,8 @@
 import { html } from "hono/html";
-import { PropsUser } from "@server/schema/auth.schema"; // Adjust path as needed
-import { SafeProperty } from "@server/schema/property.schema"; // Adjust path as needed
+import { PropsUser } from "@server/schema/auth.schema";
+import { SafeProperty } from "@server/schema/property.schema";
 
-// Config for links
+// --- CONFIGURATION ---
 const menuConfig: Record<string, Array<{ to: string; name: string }>> = {
   default: [{ to: "/join", name: "Join" }],
   tenant: [
@@ -20,38 +20,43 @@ const menuConfig: Record<string, Array<{ to: string; name: string }>> = {
 
 const ROLES_WITH_SELECTOR = new Set(["landlord", "admin"]);
 
-// --- SUB-COMPONENTS (Pure HTML) ---
+// --- COMPONENTS ---
 
+/**
+ * ThemeToggle
+ * Robust logic with large touch targets for mobile.
+ */
 export const ThemeToggle = () => html`
   <button
-    id="theme-toggle-btn"
     type="button"
-    class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-transparent hover:bg-accent hover:text-accent-foreground transition-colors"
+    class="theme-toggle-btn inline-flex h-10 w-10 items-center justify-center rounded-lg border border-input bg-transparent hover:bg-accent hover:text-accent-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-ring"
     aria-label="Toggle theme">
-    <i data-theme-icon="light" data-lucide="sun" class="hidden w-4 h-4"></i>
-    <i data-theme-icon="dark" data-lucide="moon" class="hidden w-4 h-4"></i>
-    <i data-theme-icon="system" data-lucide="laptop" class="hidden w-4 h-4"></i>
-    <i data-theme-icon="baked" data-lucide="croissant" class="hidden w-4 h-4"></i>
-    <i data-theme-icon="techno" data-lucide="binary" class="hidden w-4 h-4"></i>
+    <i data-theme-icon="light" data-lucide="sun" class="hidden w-5 h-5"></i>
+    <i data-theme-icon="dark" data-lucide="moon" class="hidden w-5 h-5"></i>
+    <i data-theme-icon="system" data-lucide="laptop" class="hidden w-5 h-5"></i>
+    <i data-theme-icon="bush" data-lucide="leaf" class="hidden w-5 h-5"></i>
+    <i data-theme-icon="dusk" data-lucide="mountain" class="hidden w-5 h-5"></i>
   </button>
 
   <script>
     (function () {
-      const THEMES = ["light", "dark", "system", "baked", "techno"];
-      const STORAGE_KEY = "vite-ui-theme";
+      // 1. GUARD: Prevent script from running twice if component is rendered multiple times
+      if (window.__theme_toggle_init) return;
+      window.__theme_toggle_init = true;
 
-      const btn = document.getElementById("theme-toggle-btn");
+      const THEMES = ["light", "dark", "system", "bush", "dusk"];
+      const STORAGE_KEY = "vite-ui-theme";
       const root = document.documentElement;
-      const icons = btn.querySelectorAll("[data-theme-icon]");
+
+      function getButtons() {
+        return document.querySelectorAll(".theme-toggle-btn");
+      }
 
       let currentTheme = localStorage.getItem(STORAGE_KEY) || "system";
       if (!THEMES.includes(currentTheme)) currentTheme = "system";
 
       function applyTheme(theme) {
-        // Remove all theme classes
         root.classList.remove(...THEMES);
-
-        // Apply theme logic
         if (theme === "system") {
           const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
           root.classList.toggle("dark", prefersDark);
@@ -60,182 +65,179 @@ export const ThemeToggle = () => html`
         }
       }
 
-      function updateIcon(theme) {
-        const iconElements = btn.querySelectorAll("[data-theme-icon]");
-        iconElements.forEach((icon) => {
-          icon.classList.toggle("hidden", icon.dataset.themeIcon !== theme);
+      function updateIcons(theme) {
+        // 2. SYNC: Update icons on ALL buttons (Desktop & Mobile)
+        const buttons = getButtons();
+        buttons.forEach((btn) => {
+          btn.querySelectorAll("[data-theme-icon]").forEach((icon) => {
+            icon.classList.toggle("hidden", icon.dataset.themeIcon !== theme);
+          });
         });
 
-        // Re-initialize lucide icons in the button
-        if (window.lucide) {
-          window.lucide.createIcons({ nameAttr: "data-lucide" });
-        }
+        if (window.lucide) window.lucide.createIcons({ nameAttr: "data-lucide" });
       }
 
       function setTheme(theme) {
         localStorage.setItem(STORAGE_KEY, theme);
         currentTheme = theme;
         applyTheme(theme);
-        updateIcon(theme);
+        updateIcons(theme);
       }
 
-      // Initialize
-      setTheme(currentTheme);
+      // Initialize on load
+      // We use a slight timeout or DOMContentLoaded to ensure both buttons are in the DOM
+      document.addEventListener("DOMContentLoaded", () => {
+        setTheme(currentTheme);
 
-      // Handle clicks
-      btn.addEventListener("click", () => {
-        const nextIdx = (THEMES.indexOf(currentTheme) + 1) % THEMES.length;
-        setTheme(THEMES[nextIdx]);
+        // 3. EVENT DELEGATION: Listen on document to catch clicks on any toggle button
+        document.addEventListener("click", (e) => {
+          const btn = e.target.closest(".theme-toggle-btn");
+          if (!btn) return;
+
+          const nextIdx = (THEMES.indexOf(currentTheme) + 1) % THEMES.length;
+          setTheme(THEMES[nextIdx]);
+        });
       });
 
-      // Listen for system theme changes when in system mode
-      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-      mediaQuery.addEventListener("change", () => {
-        if (currentTheme === "system") {
-          applyTheme("system");
-        }
+      // System Listener
+      window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+        if (currentTheme === "system") applyTheme("system");
       });
     })();
   </script>
 `;
 
+/**
+ * PropertySelector
+ * Supports 'desktop' (dropdown) and 'mobile' (accordion) variants.
+ */
+interface PropertySelectorProps {
+  currentPropertyId?: number;
+  properties?: SafeProperty[];
+  variant?: "desktop" | "mobile";
+}
+
 export const PropertySelector = ({
   currentPropertyId,
   properties,
-}: {
-  currentPropertyId?: number;
-  properties?: SafeProperty[];
-}) => {
-  // 1. Handle empty state safely
+  variant = "desktop",
+}: PropertySelectorProps) => {
   if (!properties || properties.length === 0) return null;
 
-  // 2. Derive current state
   const selectedId = Number(currentPropertyId);
   const currentProp = properties.find((p) => p.id === selectedId);
   const label = currentProp ? currentProp.nickname || currentProp.addressLine1 : "All Properties";
 
-  return (
-    <div id="nav-property-selector" className="relative">
-      <details className="group relative">
-        <summary className="flex items-center gap-2 cursor-pointer list-none text-sm font-medium hover:bg-accent/50 px-3 py-1.5 rounded-lg transition-colors marker:hidden [&::-webkit-details-marker]:hidden border border-transparent hover:border-border">
-          {/* Building Icon */}
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="text-muted-foreground">
-            <rect width="16" height="20" x="4" y="2" rx="2" ry="2" />
-            <path d="M9 22v-4h6v4" />
-            <path d="M8 6h.01" />
-            <path d="M16 6h.01" />
-            <path d="M8 10h.01" />
-            <path d="M16 10h.01" />
-            <path d="M8 14h.01" />
-            <path d="M16 14h.01" />
-          </svg>
+  // CSS Differences based on variant
+  const containerClasses = variant === "mobile" ? "w-full" : "relative";
 
-          <span className="truncate max-w-[150px]">{label}</span>
+  const summaryClasses =
+    variant === "mobile"
+      ? "flex w-full items-center justify-between gap-2 cursor-pointer list-none text-base font-medium px-4 py-3 rounded-lg bg-accent/30 hover:bg-accent transition-colors marker:hidden [&::-webkit-details-marker]:hidden"
+      : "flex items-center gap-2 cursor-pointer list-none text-sm font-medium hover:bg-accent/50 px-3 py-1.5 rounded-lg transition-colors marker:hidden [&::-webkit-details-marker]:hidden border border-transparent hover:border-border";
 
-          {/* Chevrons Icon */}
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="opacity-50">
-            <path d="m7 15 5 5 5-5" />
-            <path d="m7 9 5-5 5 5" />
-          </svg>
+  const dropdownClasses =
+    variant === "mobile"
+      ? "relative mt-2 w-full rounded-lg border-primary/20 bg-background/50" // Accordion style
+      : "absolute right-0 top-full mt-2 w-64 rounded-lg border bg-popover text-popover-foreground shadow-md z-50 overflow-hidden"; // Floating style
+
+  return html`
+    <div id="nav-property-selector-${variant}" class="${containerClasses}">
+      <details class="group relative w-full">
+        <summary class="${summaryClasses}">
+          <div class="flex items-center gap-2 overflow-hidden">
+            <i data-lucide="building" class="w-4 h-4 text-muted-foreground shrink-0"></i>
+            <span class="truncate max-w-[200px]">${label}</span>
+          </div>
+          <i
+            data-lucide="chevron-down"
+            class="w-4 h-4 opacity-50 group-open:rotate-180 transition-transform"></i>
         </summary>
 
-        {/* Dropdown Content */}
-        <div className="absolute right-0 top-full mt-2 w-64 rounded-lg border bg-popover text-popover-foreground shadow-md z-50 overflow-hidden">
-          <div className="p-1">
-            {/* 'View All' Button */}
+        <div class="${dropdownClasses}">
+          <div class="p-1">
             <button
               hx-post="/session/property"
               hx-vals='{"propertyId": "all"}'
-              hx-target="#nav-property-selector"
-              hx-swap="outerHTML"
-              className={`relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground ${
-                !currentProp ? "bg-accent/50 font-medium" : ""
-              }`}>
-              <span className="truncate">View All Properties</span>
-              {!currentProp && <i data-lucide="check" className="ml-auto h-4 w-4"></i>}
+              hx-target="body"
+              hx-swap="none"
+              onclick="location.reload()"
+              class="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground ${!currentProp
+                ? "bg-accent/50 font-medium"
+                : ""}">
+              <span class="truncate">View All Properties</span>
+              ${!currentProp ? html`<i data-lucide="check" class="ml-auto h-4 w-4"></i>` : ""}
             </button>
 
-            <div className="h-px bg-muted my-1"></div>
+            <div class="h-px bg-muted my-1"></div>
 
-            {/* Property List */}
-            <div className="max-h-[300px] overflow-y-auto">
-              {properties.map((p: any) => (
-                <button
-                  key={p.id}
-                  hx-post="/session/property"
-                  hx-vals={JSON.stringify({ propertyId: String(p.id) })}
-                  hx-swap="none"
-                  className={`relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground ${
-                    p.id === Number(currentPropertyId) ? "bg-accent/50 font-medium" : ""
-                  }`}>
-                  <span className="truncate text-left">{p.nickname || p.addressLine1}</span>
-                  {p.id === Number(currentPropertyId) && (
-                    <i data-lucide="check" className="ml-auto h-4 w-4"></i>
-                  )}
-                </button>
-              ))}
+            <div class="max-h-[300px] overflow-y-auto">
+              ${properties.map(
+                (p) => html`
+                  <button
+                    hx-post="/session/property"
+                    hx-vals="${JSON.stringify({ propertyId: String(p.id) })}"
+                    hx-target="body"
+                    hx-swap="none"
+                    onclick="location.reload()"
+                    class="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground ${p.id ===
+                    Number(currentPropertyId)
+                      ? "bg-accent/50 font-medium"
+                      : ""}">
+                    <span class="truncate text-left">${p.nickname || p.addressLine1}</span>
+                    ${p.id === Number(currentPropertyId)
+                      ? html`<i data-lucide="check" class="ml-auto h-4 w-4"></i>`
+                      : ""}
+                  </button>
+                `
+              )}
             </div>
           </div>
         </div>
       </details>
     </div>
-  );
+  `;
 };
 
+/**
+ * UserMenu (Desktop)
+ * Classic dropdown for the top bar.
+ */
 const UserMenu = ({ user }: { user: PropsUser }) => html`
   <div class="relative">
     <details class="group relative">
       <summary
-        class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-primary/10 hover:bg-primary/20 transition-colors list-none marker:hidden [&::-webkit-details-marker]:hidden">
-        <span class="font-semibold text-xs text-primary"
+        class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-primary/10 hover:bg-primary/20 transition-colors list-none marker:hidden [&::-webkit-details-marker]:hidden border border-transparent focus:border-ring ring-offset-background">
+        <span class="font-bold text-sm text-primary"
           >${user.email!.substring(0, 2).toUpperCase()}</span
         >
       </summary>
 
       <div
+        class="fixed inset-0 z-40 hidden"
+        onclick="this.parentNode.removeAttribute('open')"></div>
+
+      <div
         class="absolute right-0 top-full mt-2 w-56 rounded-lg border bg-popover p-1 text-popover-foreground shadow-md animate-in fade-in zoom-in-95 z-50">
-        <div class="px-2 py-1.5 text-sm font-semibold">
+        <div class="px-2 py-1.5 text-sm">
           <div class="flex flex-col space-y-1">
-            <p class="leading-none">${user.displayName || user.email}</p>
-            <p class="text-xs leading-none text-muted-foreground font-normal">${user.email}</p>
+            <p class="font-medium leading-none truncate">${user.displayName || "User"}</p>
+            <p class="text-xs leading-none text-muted-foreground truncate">${user.email}</p>
           </div>
         </div>
         <div class="h-px bg-muted my-1"></div>
         <a
           href="/profile"
-          class="flex w-full items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent transition-colors no-underline"
-          >Profile</a
-        >
+          class="flex w-full items-center rounded-sm px-2 py-2 text-sm hover:bg-accent transition-colors no-underline">
+          <i data-lucide="user" class="mr-2 h-4 w-4"></i> Profile
+        </a>
         <div class="h-px bg-muted my-1"></div>
         <button
           hx-post="/web/auth/logout"
-          class="flex w-full items-center rounded-sm px-2 py-1.5 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors">
-          Log out
+          class="flex w-full items-center rounded-sm px-2 py-2 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors">
+          <i data-lucide="log-out" class="mr-2 h-4 w-4"></i> Log out
         </button>
       </div>
-      <div
-        class="fixed inset-0 z-40 hidden"
-        onclick="this.parentNode.removeAttribute('open')"></div>
     </details>
   </div>
 `;
@@ -249,7 +251,7 @@ interface NavBarProps {
   properties?: SafeProperty[];
 }
 
-export const NavBar = ({ user, currentPath, properties, currentPropertyId }: NavBarProps) => {
+const getMenuItems = (user: any, config: any, rolesWithSelector: Set<string>) => {
   let menuItems: { to: string; name: string }[] = [];
   let showPropertySelector = false;
 
@@ -258,11 +260,10 @@ export const NavBar = ({ user, currentPath, properties, currentPropertyId }: Nav
     const seenLinks = new Set<string>();
 
     userRoles.forEach((role: string) => {
-      if (ROLES_WITH_SELECTOR.has(role)) showPropertySelector = true;
-
-      const items = menuConfig[role];
+      if (rolesWithSelector.has(role)) showPropertySelector = true;
+      const items = config[role];
       if (items) {
-        items.forEach((item) => {
+        items.forEach((item: any) => {
           if (!seenLinks.has(item.to)) {
             seenLinks.add(item.to);
             menuItems.push(item);
@@ -272,7 +273,12 @@ export const NavBar = ({ user, currentPath, properties, currentPropertyId }: Nav
     });
   }
 
-  if (menuItems.length === 0) menuItems = menuConfig.default;
+  if (menuItems.length === 0) menuItems = config.default;
+  return { menuItems, showPropertySelector };
+};
+
+export const NavBar = ({ user, currentPath, properties, currentPropertyId }: NavBarProps) => {
+  const { menuItems, showPropertySelector } = getMenuItems(user, menuConfig, ROLES_WITH_SELECTOR);
 
   const isActive = (to: string) => {
     if (to === "/" || to === "/admin") return currentPath === to;
@@ -282,11 +288,14 @@ export const NavBar = ({ user, currentPath, properties, currentPropertyId }: Nav
   return html`
     <header
       class="fixed top-0 left-0 right-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div class="container flex h-14 items-center justify-between px-4">
+      <div class="flex h-14 items-center justify-between px-4">
         <div class="flex items-center gap-6">
-          <a href="/" class="flex items-center gap-2 font-bold text-lg mr-4"> TenantSystem </a>
+          <a href="${user ? "/admin" : "/"}" class="flex items-center gap-2 font-bold text-lg mr-4">
+            <div class="h-6 w-6 bg-primary rounded-md"></div>
+            TenantSystem
+          </a>
 
-          <nav class="hidden md:flex items-center gap-4">
+          <nav class="hidden lg:flex items-center gap-6">
             ${menuItems.map(
               (item) => html`
                 <a
@@ -304,26 +313,171 @@ export const NavBar = ({ user, currentPath, properties, currentPropertyId }: Nav
         </div>
 
         <div class="flex items-center gap-4">
-          ${showPropertySelector ? PropertySelector({ currentPropertyId, properties }) : ""}
-          ${ThemeToggle()}
-          ${!user
-            ? html`
-                <div class="flex items-center gap-2">
-                  <a
-                    href="/login"
-                    class="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
-                    >Login</a
-                  >
-                  <a
-                    href="/register"
-                    class="inline-flex items-center justify-center rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 py-2"
-                    >Get Started</a
-                  >
-                </div>
-              `
-            : UserMenu({ user })}
+          ${showPropertySelector
+            ? html`<div class="hidden lg:block">
+                ${PropertySelector({
+                  currentPropertyId,
+                  properties,
+                  variant: "desktop",
+                })}
+              </div>`
+            : ""}
+
+          <div class="hidden lg:block">${ThemeToggle()}</div>
+
+          <div class="hidden lg:block">
+            ${!user
+              ? html`
+                  <div class="flex items-center gap-2">
+                    <a
+                      href="/login"
+                      class="text-sm font-medium text-muted-foreground hover:text-primary"
+                      >Login</a
+                    >
+                    <a
+                      href="/register"
+                      class="inline-flex items-center justify-center rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 py-2 transition-colors"
+                      >Get Started</a
+                    >
+                  </div>
+                `
+              : UserMenu({ user })}
+          </div>
+
+          <button
+            id="mobile-menu-toggle"
+            class="lg:hidden inline-flex items-center justify-center p-2 rounded-md text-foreground hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
+            aria-label="Open menu">
+            <i data-lucide="menu" class="h-6 w-6"></i>
+          </button>
         </div>
       </div>
     </header>
+
+    <div
+      id="mobile-menu"
+      class="hidden fixed inset-0 z-[100] bg-background text-foreground lg:hidden flex flex-col animate-in slide-in-from-right-10 duration-200">
+      <div class="flex items-center justify-between px-4 h-14 border-b">
+        <span class="font-bold text-lg flex items-center gap-2">
+          <div class="h-6 w-6 bg-primary rounded-sm"></div>
+          Menu
+        </span>
+        <button
+          id="mobile-menu-close"
+          class="p-2 rounded-md hover:bg-accent focus:outline-none"
+          aria-label="Close menu">
+          <i data-lucide="x" class="h-6 w-6"></i>
+        </button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-6">
+        <nav class="flex flex-col gap-2">
+          ${menuItems.map(
+            (item) => html`
+              <a
+                href="${item.to}"
+                class="flex items-center py-3 px-4 rounded-lg text-lg font-medium transition-colors hover:bg-accent ${isActive(
+                  item.to
+                )
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground"}">
+                ${item.name}
+                ${isActive(item.to)
+                  ? html`<i data-lucide="chevron-right" class="ml-auto h-5 w-5 opacity-50"></i>`
+                  : ""}
+              </a>
+            `
+          )}
+        </nav>
+
+        <hr class="border-border/50" />
+
+        ${showPropertySelector
+          ? html`
+              <div class="flex flex-col gap-3">
+                <span
+                  class="px-2 text-xs font-semibold uppercase text-muted-foreground tracking-wider"
+                  >Properties</span
+                >
+                ${PropertySelector({
+                  currentPropertyId,
+                  properties,
+                  variant: "mobile",
+                })}
+              </div>
+            `
+          : ""}
+
+        <div class="mt-auto flex flex-col gap-6">
+          <div class="flex items-center justify-between px-2">
+            <span class="text-sm font-medium">Appearance</span>
+            ${ThemeToggle()}
+          </div>
+
+          ${!user
+            ? html`
+                <div class="grid grid-cols-2 gap-4">
+                  <a
+                    href="/login"
+                    class="inline-flex items-center justify-center rounded-lg h-12 border border-input bg-background px-4 py-2 text-base font-medium hover:bg-accent hover:text-accent-foreground">
+                    Login
+                  </a>
+                  <a
+                    href="/register"
+                    class="inline-flex items-center justify-center rounded-lg h-12 bg-primary px-4 py-2 text-base font-medium text-primary-foreground hover:bg-primary/90">
+                    Get Started
+                  </a>
+                </div>
+              `
+            : html`
+                <div class="rounded-xl border bg-card text-card-foreground shadow-sm">
+                  <div class="p-4 flex items-center gap-3 border-b">
+                    <div
+                      class="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary font-bold">
+                      ${user.email!.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div class="flex flex-col min-w-0">
+                      <span class="font-medium truncate">${user.displayName || "User"}</span>
+                      <span class="text-xs text-muted-foreground truncate">${user.email}</span>
+                    </div>
+                  </div>
+                  <div class="p-2 grid grid-cols-2 gap-2">
+                    <a
+                      href="/profile"
+                      class="flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-accent transition-colors">
+                      <i data-lucide="user" class="h-4 w-4"></i> Profile
+                    </a>
+                    <button
+                      hx-post="/web/auth/logout"
+                      class="flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors">
+                      <i data-lucide="log-out" class="h-4 w-4"></i> Log out
+                    </button>
+                  </div>
+                </div>
+              `}
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        const toggleBtn = document.getElementById("mobile-menu-toggle");
+        const closeBtn = document.getElementById("mobile-menu-close");
+        const menu = document.getElementById("mobile-menu");
+
+        function openMenu() {
+          menu.classList.remove("hidden");
+          document.body.style.overflow = "hidden"; // Prevent background scroll
+        }
+
+        function closeMenu() {
+          menu.classList.add("hidden");
+          document.body.style.overflow = "";
+        }
+
+        if (toggleBtn) toggleBtn.addEventListener("click", openMenu);
+        if (closeBtn) closeBtn.addEventListener("click", closeMenu);
+      })();
+    </script>
   `;
 };

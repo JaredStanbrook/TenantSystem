@@ -3,7 +3,7 @@ import { customElement, state } from "lit/decorators.js";
 import { setTheme } from "./ThemeProvider";
 import { createIcons, Sun, Moon, Laptop, Croissant, Binary } from "lucide";
 
-const themes = ["light", "dark", "system", "baked", "techno"] as const;
+const themes = ["light", "dark", "system", "bush", "dusk"] as const;
 type Theme = (typeof themes)[number];
 
 @customElement("theme-toggle")
@@ -60,11 +60,11 @@ export class ThemeToggle extends LitElement {
           <i data-lucide="laptop"></i>
         </span>
 
-        <span class="${this.theme === "baked" ? "block" : "hidden"}">
+        <span class="${this.theme === "bush" ? "block" : "hidden"}">
           <i data-lucide="croissant"></i>
         </span>
 
-        <span class="${this.theme === "techno" ? "block" : "hidden"}">
+        <span class="${this.theme === "dusk" ? "block" : "hidden"}">
           <i data-lucide="binary"></i>
         </span>
 

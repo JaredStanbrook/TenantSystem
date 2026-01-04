@@ -21,7 +21,7 @@ export const Home = ({ user }: HomeProps) => {
 
   return (
     <div class="max-w-7xl px-4 mx-auto pt-14">
-      <div class="container grow flex flex-col items-center justify-center py-12">
+      <div class="grow flex flex-col items-center justify-center py-12">
         <div class="space-y-4">
           <h3 class="text-2xl font-bold">Welcome {user.email}</h3>
           <div class="space-y-2">

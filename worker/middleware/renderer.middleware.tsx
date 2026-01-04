@@ -29,7 +29,8 @@ export const globalRenderer = jsxRenderer(async ({ children, title }, c) => {
       title={title || "My App"}
       user={user}
       currentPropertyId={currentPropertyId}
-      properties={properties}>
+      properties={properties}
+      googleMapsApiKey={c.env.GOOGLE_MAPS_API_KEY}>
       {children}
     </Layout>
   );

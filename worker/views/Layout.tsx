@@ -11,6 +11,7 @@ interface LayoutProps {
   headExtra?: Child;
   currentPropertyId?: number;
   properties?: SafeProperty[];
+  googleMapsApiKey?: string;
 }
 
 export const Layout: FC<LayoutProps> = (props) => {
@@ -65,9 +66,8 @@ export const Layout: FC<LayoutProps> = (props) => {
               ? console.warn(p + " only loads once. Ignoring:", g)
               : (d[l] = (f, ...n) => r.add(f) && u().then(() => d[l](f, ...n)));
           })({
-            key: "AIzaSyBarZdC3dMBHljW24FAJkDMvDNWkCZ6Byo",
+            key: "${props.googleMapsApiKey}",
             v: "weekly",
-            // Use 'weekly' or a specific version like '3.58' that supports the new library
           });
         </script>
         <script
@@ -93,8 +93,7 @@ export const Layout: FC<LayoutProps> = (props) => {
         <app-toaster></app-toaster>
 
         <footer class="py-6 md:px-8 md:py-0">
-          <div
-            class="container flex flex-col items-center justify-between gap-4 md:h-24 md:flex-row">
+          <div class="flex flex-col items-center justify-between gap-4 md:h-24 md:flex-row">
             <p class="text-center text-sm leading-loose text-muted-foreground md:text-left">
               Built with Hono & Lit.
             </p>

@@ -2,7 +2,7 @@ import { LitElement, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
 // 1. Update the Theme type to include your custom options
-export type Theme = "dark" | "light" | "system" | "baked" | "techno";
+export type Theme = "dark" | "light" | "system" | "bush" | "dusk";
 
 @customElement("theme-provider")
 export class ThemeProvider extends LitElement {
@@ -56,7 +56,7 @@ export class ThemeProvider extends LitElement {
     const root = document.documentElement;
 
     // 2. Clean up ALL potential theme classes before adding the new one
-    root.classList.remove("light", "dark", "baked", "techno");
+    root.classList.remove("light", "dark", "bush", "dusk");
 
     if (theme === "system") {
       const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches
@@ -65,8 +65,6 @@ export class ThemeProvider extends LitElement {
       root.classList.add(systemTheme);
       return;
     }
-
-    // 3. Apply the specific theme class (e.g., "baked" or "techno")
     root.classList.add(theme);
   }
 

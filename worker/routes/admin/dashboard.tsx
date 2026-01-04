@@ -1,12 +1,12 @@
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
-import { eq, and, count, sql, desc, gte } from "drizzle-orm";
+import { eq, and, count, sql, desc, or, lt, gte } from "drizzle-orm";
 import type { AppEnv } from "../../types";
 import { property } from "../../schema/property.schema";
 import { room } from "../../schema/room.schema";
 import { tenancy } from "../../schema/tenancy.schema";
-import { Dashboard } from "../../views/admin/Dashboard";
-import { invoice } from "../../schema/invoice.schema";
+import { invoice, Invoice } from "../../schema/invoice.schema"; // Ensure Invoice type is exported
+import { Dashboard, DashboardMetrics } from "../../views/admin/Dashboard";
 
 export const dashboardRoute = new Hono<AppEnv>();
 
@@ -25,13 +25,21 @@ dashboardRoute.get("/", async (c) => {
   const [prop] = await db.select().from(property).where(eq(property.id, propertyId)).limit(1);
 
   if (!prop) {
-    // Cookie might be stale
     return c.render(<Dashboard property={null} metrics={null} />, { title: "Dashboard" });
   }
 
+  const now = new Date();
+
   // 3. Fetch Metrics in Parallel
-  const [roomStats, activeTenancies, maintenanceStats, invoiceStats] = await Promise.all([
-    // A: Room Stats (Total & Occupied)
+  const [
+    roomStats,
+    activeTenancies,
+    maintenanceStats,
+    invoiceStats,
+    recentInvoices,
+    financialHealth,
+  ] = await Promise.all([
+    // A: Room Stats
     db
       .select({
         total: count(),
@@ -40,13 +48,13 @@ dashboardRoute.get("/", async (c) => {
       .from(room)
       .where(eq(room.propertyId, propertyId)),
 
-    // B: Active Tenancies Count
+    // B: Active Tenancies
     db
       .select({ count: count() })
       .from(tenancy)
       .where(and(eq(tenancy.propertyId, propertyId), eq(tenancy.status, "active"))),
 
-    // C: Maintenance Count (Vacant Maintenance + Under Repair)
+    // C: Maintenance
     db
       .select({ count: count() })
       .from(room)
@@ -57,16 +65,39 @@ dashboardRoute.get("/", async (c) => {
         )
       ),
 
-    // D: Invoice Stats (Sum totalAmount by Type)
+    // D: Invoice Distribution (Type Breakdown)
     db
       .select({
         type: invoice.type,
-        total: sql<number>`sum(${invoice.totalAmount})`, // Sum in cents
+        total: sql<number>`sum(${invoice.totalAmount})`,
       })
       .from(invoice)
       .where(eq(invoice.propertyId, propertyId))
       .groupBy(invoice.type)
       .orderBy(desc(sql`sum(${invoice.totalAmount})`)),
+
+    // E: Recent Invoices (The "Frequently Changing" Data)
+    db
+      .select()
+      .from(invoice)
+      .where(eq(invoice.propertyId, propertyId))
+      .orderBy(desc(invoice.createdAt))
+      .limit(5),
+
+    // F: Financial Health (Overdue vs Pending)
+    db
+      .select({
+        overdue: sql<number>`sum(case when ${invoice.status} = 'overdue' OR (${
+          invoice.status
+        } = 'open' AND ${invoice.dueDate} < ${now.getTime()}) then ${
+          invoice.totalAmount
+        } else 0 end)`,
+        pending: sql<number>`sum(case when ${invoice.status} = 'open' AND ${
+          invoice.dueDate
+        } >= ${now.getTime()} then ${invoice.totalAmount} else 0 end)`,
+      })
+      .from(invoice)
+      .where(eq(invoice.propertyId, propertyId)),
   ]);
 
   // 4. Process Data
@@ -75,7 +106,7 @@ dashboardRoute.get("/", async (c) => {
   const maintenanceRooms = maintenanceStats[0]?.count || 0;
   const vacantRooms = Math.max(0, totalRooms - occupiedRooms - maintenanceRooms);
 
-  const metrics = {
+  const metrics: DashboardMetrics = {
     totalRooms,
     occupiedRooms,
     vacantRooms,
@@ -86,6 +117,11 @@ dashboardRoute.get("/", async (c) => {
       type: s.type,
       amount: Number(s.total) || 0,
     })),
+    recentInvoices: recentInvoices as Invoice[],
+    financials: {
+      overdueAmount: Number(financialHealth[0]?.overdue) || 0,
+      pendingAmount: Number(financialHealth[0]?.pending) || 0,
+    },
   };
 
   return c.render(<Dashboard property={prop} metrics={metrics} />, {

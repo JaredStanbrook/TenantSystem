@@ -142,7 +142,7 @@ export const ExpenseCard = (item: ExpenseView) => {
 };
 
 export const ExpensePage = (expenses: ExpenseView[]) => html`
-  <div class="container max-w-4xl mx-auto space-y-8 p-8 pt-20 animate-in fade-in duration-500">
+  <div class="max-w-4xl mx-auto space-y-8 p-8 pt-20 animate-in fade-in duration-500">
     <div>
       <h1 class="text-3xl font-bold tracking-tight">My Expenses</h1>
       <p class="text-muted-foreground mt-1">Manage your rent and utility payments.</p>
