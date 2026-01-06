@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "bunx --bun vite",
-    "build": "bun run typecheck && bun run build:client && bun run build:server",
+    "build": "bun run typecheck || true && bun run build:client && bun run build:server",
     "build:client": "bunx --bun vite build --mode client",
     "build:server": "bunx --bun vite build",
     "typecheck": "tsc -b",

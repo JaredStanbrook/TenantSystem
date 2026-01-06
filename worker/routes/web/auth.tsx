@@ -19,7 +19,7 @@ webAuth.get("/", (c) => {
 
 webAuth.get("/register", (c) => {
   const { auth, authConfig } = c.var;
-  if (auth.user) return c.redirect("/dashboard");
+  if (auth.user) return c.redirect("/");
 
   const props = {
     methods: Array.from(authConfig.methods),
@@ -33,7 +33,7 @@ webAuth.get("/register", (c) => {
 
 webAuth.get("/login", (c) => {
   const { auth, authConfig } = c.var;
-  if (auth.user) return c.redirect("/dashboard");
+  if (auth.user) return c.redirect("/");
 
   const props = {
     methods: Array.from(authConfig.methods),
