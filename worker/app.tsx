@@ -80,7 +80,7 @@ const app = new Hono<AppEnv>()
     zValidator("form", z.object({ propertyId: z.string() })),
     async (c) => {
       const { propertyId } = c.req.valid("form");
-
+      console.log("Switching context to property ID:", propertyId);
       if (propertyId === "all") {
         // "View All" - remove the filter
         deleteCookie(c, "selected_property_id");
@@ -99,7 +99,7 @@ const app = new Hono<AppEnv>()
       // so the new cookie takes effect on the UI
       c.header("HX-Refresh", "true");
       return c.body(null);
-    }
+    },
   )
 
   // ==========================================

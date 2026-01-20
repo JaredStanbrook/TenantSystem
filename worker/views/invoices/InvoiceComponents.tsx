@@ -277,7 +277,6 @@ export const InvoiceForm = ({
              ${TenantSection({ splits, isLocked })}
           </div>
 
-          ${!isEdit ? RecurrenceOptions() : ""}
           
           <div class="flex justify-end pt-6 border-t">
              <button type="submit" class="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-6 py-2.5 text-sm font-medium shadow">
@@ -289,47 +288,6 @@ export const InvoiceForm = ({
     </div>
   `;
 };
-export const RecurrenceOptions = () => html`
-  <div class="rounded-md border p-4 bg-muted/20 space-y-4 mt-6">
-    <div class="flex items-start gap-3">
-      <div class="flex h-6 items-center">
-        <input
-          id="isRecurring"
-          name="isRecurring"
-          type="checkbox"
-          class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-          onchange="document.getElementById('recurrence-settings').classList.toggle('hidden', !this.checked)" />
-      </div>
-      <div class="text-sm">
-        <label for="isRecurring" class="font-medium text-gray-900">Repeat this invoice</label>
-        <p class="text-gray-500">Automatically generate future invoices with these splits.</p>
-      </div>
-    </div>
-
-    <div id="recurrence-settings" class="hidden space-y-4 pt-2 border-t border-gray-200">
-      <div class="grid grid-cols-2 gap-4">
-        <div class="space-y-2">
-          <label class="text-sm font-medium">Frequency</label>
-          <select
-            name="frequency"
-            class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-            <option value="weekly">Weekly</option>
-            <option value="fortnightly">Fortnightly</option>
-            <option value="monthly" selected>Monthly</option>
-            <option value="yearly">Yearly</option>
-          </select>
-        </div>
-        <div class="space-y-2">
-          <label class="text-sm font-medium">End Date (Optional)</label>
-          <input
-            type="date"
-            name="recurrenceEndDate"
-            class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
-        </div>
-      </div>
-    </div>
-  </div>
-`;
 // --- 5. Invoice Table & Row ---
 export const InvoiceRow = ({
   invoice,
@@ -345,22 +303,12 @@ export const InvoiceRow = ({
   const percentage = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
   const isFullyPaid = paid >= total && total > 0;
 
-  // NEW: Check if this invoice came from a schedule
-  const isRecurring = !!invoice.recurringInvoiceId;
-
   return html`
     <tr class="hover:bg-muted/50 transition-colors border-b" id="invoice-row-${invoice.id}">
       <td class="p-4 align-middle">
         <div class="flex flex-col gap-1">
           <div class="flex items-center gap-2">
             <span class="font-medium text-sm">${invoice.description || invoice.type}</span>
-            ${isRecurring
-              ? html`<i
-                  data-lucide="repeat"
-                  class="w-3 h-3 text-blue-500/70"
-                  title="Auto-generated from Recurring Schedule">
-                </i>`
-              : ""}
           </div>
           <div class="flex items-center gap-2">
             ${InvoiceStatusBadge(invoice.status, invoice.dueDate, isFullyPaid)}
@@ -444,12 +392,13 @@ export const InvoiceTable = ({
         </div>
         <div class="flex gap-2">
           <button
-            hx-get="/admin/invoices/recurring"
+            hx-get="/admin/invoices/generate"
             hx-target="#main-content"
             hx-push-url="true"
+            disabled
             class="inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium border border-input bg-background hover:bg-accent h-10 px-4 shadow-sm transition-colors">
             <i data-lucide="repeat" class="w-4 h-4 text-muted-foreground"></i>
-            Recurring Schedules
+            Generate Property Invoices (Coming Soon)
           </button>
 
           <button

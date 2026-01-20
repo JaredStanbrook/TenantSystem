@@ -10,14 +10,11 @@ import { invoicePayment } from "@server/schema/invoicePayment.schema";
 import { users } from "@server/schema/auth.schema";
 import { property } from "@server/schema/property.schema";
 import { tenancy } from "@server/schema/tenancy.schema";
-import { recurringInvoice, recurringInvoiceSplit } from "@server/schema/recurring.schema";
 import { InvoiceService } from "@server/services/invoice.service";
-import { RecurringService } from "@server/services/recurring.service";
 import type { AppEnv } from "@server/types";
 
 // UI
 import { InvoiceTable, InvoiceForm, TenantSection } from "@views/invoices/InvoiceComponents";
-import { RecurringInvoiceList, RecurringInvoiceForm } from "@views/invoices/RecurringComponents";
 import { htmxResponse, htmxToast, htmxRedirect, flashToast } from "@server/lib/htmx-helpers";
 
 export const invoiceRoute = new Hono<AppEnv>();
@@ -32,10 +29,6 @@ const formSchema = z.object({
   amountDollars: z.coerce.number().min(0.01, "Amount must be positive"),
   dueDate: z.coerce.date(),
   page: z.string().optional().default("1"),
-
-  isRecurring: z.coerce.boolean().optional(),
-  frequency: z.enum(["weekly", "fortnightly", "monthly", "yearly"]).optional(),
-  recurrenceEndDate: z.coerce.date().optional(),
 
   // Dynamic Lists
   "tenantIds[]": z.union([z.string(), z.array(z.string())]).optional(),
@@ -180,33 +173,7 @@ invoiceRoute.post("/", zValidator("form", formSchema), async (c) => {
       })),
     );
   }
-
-  // 2. NEW: Handle Recurrence
-  if (data.isRecurring && data.frequency) {
-    // We use the current invoice's due date as the "Start Date" for the cycle
-    await RecurringService.createDefinition(
-      db,
-      {
-        propertyId: data.propertyId,
-        type: data.type,
-        description: data.description,
-        totalAmount: totalCents,
-        frequency: data.frequency as any,
-        startDate: data.dueDate, // The cycle starts based on this invoice
-        endDate: data.recurrenceEndDate,
-      },
-      splits, // We copy the same splits to the template
-    );
-
-    // Optional: Update the immediate invoice to link it?
-    // We skip this for the first one to avoid complex update logic, or we can do it:
-    // await db.update(invoice).set({ recurringInvoiceId: def.id }).where(eq(invoice.id, newInvoice.id));
-
-    flashToast(c, "Invoice & Schedule Created", { type: "success" });
-  } else {
-    flashToast(c, "Invoice Created", { type: "success" });
-  }
-
+  flashToast(c, "Invoice Created", { type: "success" });
   return htmxRedirect(c, "/admin/invoices");
 });
 
@@ -236,7 +203,7 @@ invoiceRoute.get("/:id/edit", async (c) => {
 
   const myProperties = await db.select().from(property).where(eq(property.landlordId, userId));
   const totalPaid = payments.reduce((acc, p) => acc + p.amountPaid, 0);
-
+  console.log(payments);
   return htmxResponse(
     c,
     "Manage Invoice",
@@ -246,7 +213,7 @@ invoiceRoute.get("/:id/edit", async (c) => {
       payments: payments,
       action: `/admin/invoices/${id}/update`,
       page: c.req.query("page") || "1",
-      isLocked: totalPaid > 0, // Lock financial edits if money collected
+      isLocked: true, // Lock financial edits if money collected
     }),
   );
 });
@@ -430,125 +397,136 @@ invoiceRoute.get("/fragments/tenant-section", async (c) => {
 
   return c.html(TenantSection({ splits, isLocked: false })); // New component needed
 });
-// --- RECURRING INVOICE ROUTES ---
+// POST /admin/invoices/tenancy/:id/generate
+invoiceRoute.post("/tenancy/:id/generate", async (c) => {
+  const tenancyId = Number(c.req.param("id"));
+  const formData = await c.req.parseBody();
+  const strategy = formData["strategy"] as string; // 'all' | 'rent_only' | 'bond_only' | 'skip'
 
-// 1. List Recurring Invoices
-invoiceRoute.get("/recurring", async (c) => {
-  const db = c.var.db;
-  const user = c.var.auth.user!;
+  if (strategy === "skip") {
+    // Just redirect to the tenancy list or dashboard
+    return htmxRedirect(c, `/admin/tenancies`);
+  }
 
-  const schedules = await db
-    .select({
-      id: recurringInvoice.id,
-      description: recurringInvoice.description,
-      type: recurringInvoice.type,
-      frequency: recurringInvoice.frequency,
-      totalAmount: recurringInvoice.totalAmount,
-      active: recurringInvoice.active,
-      nextRunDate: recurringInvoice.nextRunDate,
-      propertyName: property.nickname,
-    })
-    .from(recurringInvoice)
-    .innerJoin(property, eq(recurringInvoice.propertyId, property.id))
-    .where(eq(property.landlordId, user.id))
-    .orderBy(desc(recurringInvoice.nextRunDate));
+  const db = c.get("db");
 
-  return htmxResponse(c, "Recurring Invoices", RecurringInvoiceList({ schedules }));
-});
-
-// 2. Edit Form
-invoiceRoute.get("/recurring/:id/edit", async (c) => {
-  const db = c.var.db;
-  const id = Number(c.req.param("id"));
-  const user = c.var.auth.user!;
-
-  // Fetch Definition
-  const [schedule] = await db
-    .select({
-      ...recurringInvoice, // Select all fields
-      propertyName: property.nickname,
-    })
-    .from(recurringInvoice)
-    .innerJoin(property, eq(recurringInvoice.propertyId, property.id))
-    .where(and(eq(recurringInvoice.id, id), eq(property.landlordId, user.id)));
-
-  if (!schedule) return c.text("Unauthorized", 403);
-
-  // Fetch Splits
-  const splits = await db
-    .select({
-      userId: recurringInvoiceSplit.userId,
-      amountOwed: recurringInvoiceSplit.amountOwed,
-      userDisplayName: users.displayName,
-      userEmail: users.email,
-    })
-    .from(recurringInvoiceSplit)
-    .innerJoin(users, eq(recurringInvoiceSplit.userId, users.id))
-    .where(eq(recurringInvoiceSplit.recurringInvoiceId, id));
-
-  const myProperties = await db.select().from(property).where(eq(property.landlordId, user.id));
-
-  return htmxResponse(
-    c,
-    "Edit Schedule",
-    RecurringInvoiceForm({
-      schedule,
-      splits: splits.map((s) => ({ ...s, extensionDays: 0, amountCents: s.amountOwed })),
-      properties: myProperties,
-    }),
-  );
-});
-
-// 3. Update Action
-invoiceRoute.post("/recurring/:id/update", zValidator("form", formSchema), async (c) => {
-  const db = c.var.db;
-  const id = Number(c.req.param("id"));
-  const data = c.req.valid("form");
-  const rawBody = await c.req.parseBody();
-
-  // Validate Ownership
-  const [exists] = await db
+  // 1. Fetch Tenancy & Property
+  const tenRecord = await db
     .select()
-    .from(recurringInvoice)
-    .innerJoin(property, eq(recurringInvoice.propertyId, property.id))
-    .where(and(eq(recurringInvoice.id, id), eq(property.landlordId, c.var.auth.user!.id)));
+    .from(tenancy)
+    .where(eq(tenancy.id, tenancyId))
+    .innerJoin(property, eq(tenancy.propertyId, property.id))
+    .execute()
+    .then((res) => res.map((r) => ({ ...r.tenancy, property: r.property }))[0]);
+  //TODO : Fix typing there got be a better way to do this
+  console.log(tenRecord);
+  if (!tenRecord || !tenRecord.property) {
+    htmxToast(c, "Tenancy or Property not found", { type: "error" });
+    return htmxRedirect(c, "/admin/tenancies");
+  }
 
-  if (!exists) return c.text("Unauthorized", 403);
+  const operations = [];
+  const messages = [];
 
-  const totalCents = Math.round(data.amountDollars * 100);
-  const splits = InvoiceService.parseSplits(rawBody["tenantIds[]"], rawBody["tenantAmounts[]"], []);
+  // 2. Bond Generation Logic
+  if (strategy === "all" || strategy === "bond_only") {
+    // Only generate if bond amount exists
+    if (tenRecord.bondAmount && tenRecord.bondAmount > 0) {
+      operations.push(
+        db.insert(invoice).values({
+          propertyId: tenRecord.propertyId,
+          type: "other", // or 'bond' if you add it to enum
+          description: "Bond Payment",
+          totalAmount: tenRecord.bondAmount,
+          dueDate: tenRecord.startDate, // Bond due on start date
+          status: "open",
+          // Deterministic Key: bond-{tenancyId}
+          idempotencyKey: `bond-${tenRecord.id}`,
+        }),
+      );
+      messages.push("Bond Invoice");
+    }
+  }
 
-  // Use the newly added Service method
-  await RecurringService.updateDefinition(
-    db,
-    id,
-    {
-      propertyId: data.propertyId,
-      type: data.type,
-      description: data.description,
-      totalAmount: totalCents,
-      frequency: data.frequency as any,
-      nextRunDate: data.dueDate, // We map the form's "dueDate" to "nextRunDate" contextually
-      active: true,
-      endDate: data.recurrenceEndDate,
-    },
-    splits,
-  );
+  // 3. Rent Catch-up Logic
+  if (strategy === "all" || strategy === "rent_only") {
+    // Use the logic we defined previously
+    const rentAction = await InvoiceService.calculateNextRent(tenRecord.property, tenRecord);
 
-  flashToast(c, "Schedule Updated", { type: "success" });
-  return htmxRedirect(c, "/admin/invoices/recurring");
+    if (rentAction) {
+      // A. Create Invoice
+      const description = `Initial Rent (${rentAction.start.toLocaleDateString()} - ${rentAction.end.toLocaleDateString()})`;
+
+      operations.push(
+        db.insert(invoice).values({
+          propertyId: tenRecord.propertyId,
+          type: "rent",
+          description: description,
+          totalAmount: rentAction.amountCents,
+          dueDate: rentAction.start,
+          status: "open",
+          idempotencyKey: rentAction.idempotencyKey,
+        }),
+      );
+
+      // B. Update Tenancy "High Water Mark"
+      operations.push(
+        db
+          .update(tenancy)
+          .set({ billedThroughDate: rentAction.end, updatedAt: new Date() })
+          .where(eq(tenancy.id, tenancyId)),
+      );
+      messages.push("Rent Catch-up Invoice");
+    }
+  }
+  // 4. Execute Batch
+  if (operations.length > 0) {
+    try {
+      await db.batch(operations as any);
+
+      // 5. Success Response
+      // Redirect to the tenancy details page to see the new invoices
+      flashToast(c, "Invoices Generated", { type: "success" });
+    } catch (e: any) {
+      // Handle idempotency (if user double-clicked or refreshed)
+      if (e.message.includes("UNIQUE constraint")) {
+        flashToast(c, "Invoices already exist.", { type: "info" });
+      }
+      flashToast(c, "Database Error", { type: "error" });
+    }
+    return htmxRedirect(c, `/admin/tenancies`);
+  } else {
+    // Nothing to do
+    return htmxRedirect(c, `/admin/tenancies`);
+  }
 });
-
-// 4. Toggle Active Status
-invoiceRoute.post("/recurring/:id/toggle", async (c) => {
+// 9. DELETE /:id (Delete Invoice)
+invoiceRoute.delete("/:id", async (c) => {
   const db = c.var.db;
   const id = Number(c.req.param("id"));
+  const userId = c.var.auth.user!.id;
 
-  const [schedule] = await db.select().from(recurringInvoice).where(eq(recurringInvoice.id, id));
-  if (!schedule) return c.text("Not found", 404);
+  // Verify ownership
+  const [inv] = await db
+    .select({ invoice: invoice, property: property })
+    .from(invoice)
+    .innerJoin(property, eq(invoice.propertyId, property.id))
+    .where(eq(invoice.id, id));
 
-  await RecurringService.toggle(db, id, !schedule.active);
+  if (!inv || inv.property.landlordId !== userId) return c.text("Unauthorized", 403);
 
-  // Refresh the specific row
-  return htmxRedirect(c, "/admin/invoices/recurring");
+  // Check for payments
+  const payments = await db.select().from(invoicePayment).where(eq(invoicePayment.invoiceId, id));
+
+  if (payments.some((p) => p.amountPaid > 0)) {
+    flashToast(c, "Cannot delete invoice with payments", { type: "error" });
+    return c.text("Invoice has payments", 400);
+  }
+
+  // Delete payments first, then invoice
+  await db.delete(invoicePayment).where(eq(invoicePayment.invoiceId, id));
+  await db.delete(invoice).where(eq(invoice.id, id));
+
+  flashToast(c, "Invoice Deleted", { type: "success" });
+  return htmxRedirect(c, "/admin/invoices");
 });

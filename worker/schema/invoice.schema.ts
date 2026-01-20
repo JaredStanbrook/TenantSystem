@@ -4,7 +4,6 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { property } from "./property.schema";
-import { recurringInvoice } from "./recurring.schema";
 
 // --- Enums & Constants ---
 export const INVOICE_TYPES = [
@@ -65,7 +64,7 @@ export const invoice = sqliteTable("invoice", {
   createdAt: integer("created_at", { mode: "timestamp" })
     .default(sql`(unixepoch())`)
     .notNull(),
-  recurringInvoiceId: integer("recurring_invoice_id").references(() => recurringInvoice.id),
+  idempotencyKey: text("idempotency_key").unique(),
 });
 
 // --- Zod Schemas ---

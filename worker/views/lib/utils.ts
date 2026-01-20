@@ -4,7 +4,11 @@ export const capitalize = (str: string): string => {
   if (!str) return "";
   return str.charAt(0).toUpperCase() + str.slice(1);
 };
-
+export const formatCentsToDollars = (cents: number | undefined | null): string => {
+  if (cents === undefined || cents === null) return "";
+  const dollars = cents / 100;
+  return `$${dollars.toFixed(2)}`;
+};
 export const StatusBadge = (status: string, styles: Record<string, string>, iconName?: string) => {
   // Format label: "pending_agreement" -> "Pending Agreement"
   const label = status.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());

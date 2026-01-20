@@ -1,6 +1,6 @@
 import { html } from "hono/html";
 import { Property } from "../../schema/property.schema";
-import { capitalize, StatusBadge } from "../lib/utils";
+import { capitalize, formatCentsToDollars, StatusBadge } from "../lib/utils";
 const styles: Record<string, string> = {
   vacant: "bg-blue-100 text-blue-800 border-blue-200",
   occupied: "bg-emerald-100 text-emerald-800 border-emerald-200",
@@ -240,7 +240,8 @@ export const PropertyForm = ({
               <input
                 type="number"
                 name="rentAmount"
-                value="${prop?.rentAmount || ""}"
+                value="${(prop?.rentAmount ?? 0) / 100 || ""}"
+                step="0.01"
                 required
                 class="flex h-10 w-full rounded-lg border border-input px-3" />
             </div>

@@ -1,6 +1,6 @@
 import { html } from "hono/html";
 import { ROOM_STATUS_VALUES, type SafeRoom } from "@server/schema/room.schema";
-import { capitalize, StatusBadge } from "../lib/utils";
+import { capitalize, formatCentsToDollars, StatusBadge } from "../lib/utils";
 
 const roomStyles: Record<string, string> = {
   occupied: "bg-emerald-100 text-emerald-800 border-emerald-200",
@@ -26,7 +26,7 @@ export const RoomRow = ({ room }: { room: SafeRoom & { baseRentAmount?: number |
     </td>
     <td class="p-4 align-middle">${StatusBadge(room.status, roomStyles)}</td>
     <td class="p-4 align-middle text-muted-foreground">
-      ${room.baseRentAmount ? `$${room.baseRentAmount}` : "—"}
+      ${room.baseRentAmount ? formatCentsToDollars(room.baseRentAmount) : "—"}
     </td>
     <td class="p-4 align-middle text-right">
       <button
@@ -146,7 +146,7 @@ export const RoomForm = ({ room, action }: { room: any; action: string }) => htm
             <input
               type="number"
               name="baseRentAmount"
-              value="${room.baseRentAmount || ""}"
+              value="${(room.baseRentAmount ?? 0) / 100 || ""}"
               placeholder="0.00"
               step="0.01"
               class="flex h-10 w-full rounded-lg border border-input bg-background pl-7 pr-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />

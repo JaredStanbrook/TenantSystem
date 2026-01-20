@@ -159,9 +159,6 @@ export const PropertySelector = ({
             <button
               hx-post="/session/property"
               hx-vals='{"propertyId": "all"}'
-              hx-target="body"
-              hx-swap="none"
-              onclick="location.reload()"
               class="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground ${!currentProp
                 ? "bg-accent/50 font-medium"
                 : ""}">
@@ -177,9 +174,6 @@ export const PropertySelector = ({
                   <button
                     hx-post="/session/property"
                     hx-vals="${JSON.stringify({ propertyId: String(p.id) })}"
-                    hx-target="body"
-                    hx-swap="none"
-                    onclick="location.reload()"
                     class="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground ${p.id ===
                     Number(currentPropertyId)
                       ? "bg-accent/50 font-medium"
@@ -189,7 +183,7 @@ export const PropertySelector = ({
                       ? html`<i data-lucide="check" class="ml-auto h-4 w-4"></i>`
                       : ""}
                   </button>
-                `
+                `,
               )}
             </div>
           </div>
@@ -301,13 +295,13 @@ export const NavBar = ({ user, currentPath, properties, currentPropertyId }: Nav
                 <a
                   href="${item.to}"
                   class="text-sm font-medium transition-colors hover:text-primary ${isActive(
-                    item.to
+                    item.to,
                   )
                     ? "text-foreground"
                     : "text-muted-foreground"}">
                   ${item.name}
                 </a>
-              `
+              `,
             )}
           </nav>
         </div>
@@ -377,7 +371,7 @@ export const NavBar = ({ user, currentPath, properties, currentPropertyId }: Nav
               <a
                 href="${item.to}"
                 class="flex items-center py-3 px-4 rounded-lg text-lg font-medium transition-colors hover:bg-accent ${isActive(
-                  item.to
+                  item.to,
                 )
                   ? "bg-accent text-foreground"
                   : "text-muted-foreground"}">
@@ -386,7 +380,7 @@ export const NavBar = ({ user, currentPath, properties, currentPropertyId }: Nav
                   ? html`<i data-lucide="chevron-right" class="ml-auto h-5 w-5 opacity-50"></i>`
                   : ""}
               </a>
-            `
+            `,
           )}
         </nav>
 

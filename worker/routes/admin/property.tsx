@@ -16,6 +16,7 @@ import type { AppEnv } from "@server/types";
 import app from "@server/app";
 import { PropertySelector } from "@views/components/NavBar";
 import { SelectionDialog } from "@server/views/components/SelectionDialog";
+import { currencyConvertor } from "@server/lib/utils";
 
 export const propertyRoute = new Hono<AppEnv>();
 
@@ -89,7 +90,7 @@ propertyRoute.post(
     const db = c.var.db;
     const data = c.req.valid("form");
     const userId = c.var.auth.user!.id;
-
+    data.rentAmount = currencyConvertor(data.rentAmount.toString());
     const [newProp] = await db
       .insert(property)
       .values({
@@ -250,7 +251,7 @@ propertyRoute.post(
 
     // --- CALCULATION & BATCHING ---
     const batchOperations = [];
-    let finalPropertyRent = data.rentAmount;
+    let finalPropertyRent = currencyConvertor(data.rentAmount.toString());
 
     // Determine the base rent for new rooms (default 0 for manual strategies)
     let newRoomBaseRent = 0;

@@ -47,6 +47,7 @@ export const tenancy = sqliteTable("tenancy", {
     .default(sql`(unixepoch())`)
     .notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).$onUpdate(() => new Date()),
+  billedThroughDate: integer("billed_through_date", { mode: "timestamp" }).notNull(),
 });
 
 // --- Zod Schemas ---

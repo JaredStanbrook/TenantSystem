@@ -52,6 +52,7 @@ export const property = sqliteTable("property", {
     .default(sql`(unixepoch())`)
     .notNull()
     .$onUpdate(() => new Date()),
+  billingAnchorDay: integer("billing_anchor_day").default(1).notNull(),
 });
 
 // --- 2. Zod Schemas for Validation ---

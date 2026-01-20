@@ -27,7 +27,7 @@ type TenancyView = Tenancy & {
 
 // --- 1. Tenancy Row ---
 export const TenancyRow = ({ t }: { t: TenancyView }) => html`
-  <tr class="hover:bg-muted/50 transition-colors border-b group" id="row-${t.id}">
+  <tr class="hover:bg-muted/50 transition-colors border-b group" id="tenancy-row-${t.id}">
     <td class="p-4 align-middle">
       <div class="flex items-center gap-3">
         <div
@@ -67,15 +67,25 @@ export const TenancyRow = ({ t }: { t: TenancyView }) => html`
       </div>
     </td>
     <td class="p-4 align-middle">${StatusBadge(t.status, styles)}</td>
+
     <td class="p-4 align-middle text-right">
-      <button
-        hx-get="/admin/tenancies/${t.id}/edit"
-        hx-target="#main-content"
-        hx-push-url="true"
-        class="inline-flex items-center justify-center rounded-md text-sm font-medium border border-input bg-background hover:bg-accent h-8 w-8 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
-        aria-label="Edit tenancy">
-        <i data-lucide="pencil" class="w-4 h-4"></i>
-      </button>
+      <div class="flex justify-end gap-2">
+        <button
+          hx-get="/admin/tenancies/${t.id}/edit"
+          hx-push-url="true"
+          hx-target="#main-content"
+          class="inline-flex items-center justify-center rounded-lg text-sm font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground h-8 w-8">
+          <i data-lucide="pencil" class="w-4 h-4"></i>
+        </button>
+        <button
+          hx-delete="/admin/tenancies/${t.id}"
+          hx-target="#tenancy-row-${t.id}"
+          hx-swap="outerHTML swap:0.5s"
+          hx-confirm="Delete this tenancy?"
+          class="inline-flex items-center justify-center rounded-lg text-sm font-medium border border-input bg-background hover:bg-destructive hover:text-destructive-foreground h-8 w-8">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+        </button>
+      </div>
     </td>
   </tr>
 `;
@@ -135,7 +145,7 @@ export const TenancyTable = ({
               <th class="h-12 px-4 align-middle font-medium text-muted-foreground">Timeline</th>
               <th class="h-12 px-4 align-middle font-medium text-muted-foreground">Status</th>
               <th class="h-12 px-4 align-middle font-medium text-muted-foreground text-right">
-                Edit
+                Actions
               </th>
             </tr>
           </thead>
@@ -165,14 +175,14 @@ export const TenancyTable = ({
 // --- 3. Tenancy Form (Enhanced) ---
 export const TenancyForm = ({
   tenancy,
-  properties,
+  properties = [],
   rooms = [],
   action,
   emailValue = "",
   errors = {},
 }: {
   tenancy?: Partial<Tenancy>;
-  properties: Property[];
+  properties?: Property[];
   rooms?: SafeRoom[];
   action: string;
   emailValue?: string;
@@ -247,6 +257,7 @@ export const TenancyForm = ({
               hx-target="#room-select"
               hx-trigger="change"
               class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring">
+              <option value="">Select a Property...</option>
               ${properties.map(
                 (p) => html`
                   <option value="${p.id}" ${tenancy?.propertyId === p.id ? "selected" : ""}>
@@ -324,6 +335,7 @@ export const TenancyForm = ({
               type="number"
               name="bondAmount"
               placeholder="0.00"
+              step="0.01"
               value="${tenancy?.bondAmount || ""}"
               class="flex h-10 w-full pl-7 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring" />
           </div>
