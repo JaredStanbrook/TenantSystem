@@ -213,7 +213,7 @@ invoiceRoute.get("/:id/edit", async (c) => {
       payments: payments,
       action: `/admin/invoices/${id}/update`,
       page: c.req.query("page") || "1",
-      isLocked: true, // Lock financial edits if money collected
+      isLocked: totalPaid > 0, // Lock financial edits if money collected
     }),
   );
 });
@@ -401,12 +401,9 @@ invoiceRoute.get("/fragments/tenant-section", async (c) => {
 invoiceRoute.post("/tenancy/:id/generate", async (c) => {
   const tenancyId = Number(c.req.param("id"));
   const formData = await c.req.parseBody();
-  const strategy = formData["strategy"] as string; // 'all' | 'rent_only' | 'bond_only' | 'skip'
+  const strategy = formData["strategy"] as string;
 
-  if (strategy === "skip") {
-    // Just redirect to the tenancy list or dashboard
-    return htmxRedirect(c, `/admin/tenancies`);
-  }
+  if (strategy === "skip") return htmxRedirect(c, `/admin/tenancies`);
 
   const db = c.get("db");
 
@@ -416,89 +413,105 @@ invoiceRoute.post("/tenancy/:id/generate", async (c) => {
     .from(tenancy)
     .where(eq(tenancy.id, tenancyId))
     .innerJoin(property, eq(tenancy.propertyId, property.id))
-    .execute()
-    .then((res) => res.map((r) => ({ ...r.tenancy, property: r.property }))[0]);
-  //TODO : Fix typing there got be a better way to do this
-  console.log(tenRecord);
+    .get()
+    .then((res) => (res ? { ...res.tenancy, property: res.property } : null));
+
   if (!tenRecord || !tenRecord.property) {
-    htmxToast(c, "Tenancy or Property not found", { type: "error" });
+    htmxToast(c, "Tenancy not found", { type: "error" });
     return htmxRedirect(c, "/admin/tenancies");
   }
 
-  const operations = [];
-  const messages = [];
+  // 2. Helper to Safely Create Invoice + Payment
+  // This replaces the transaction. If payment creation fails, it deletes the invoice.
+  const createInvoiceWithPayment = async (invoiceData: any, amount: number) => {
+    let newInvoiceId: number | null = null;
+    try {
+      // A. Create Invoice
+      const [newInv] = await db.insert(invoice).values(invoiceData).returning();
+      newInvoiceId = newInv.id;
 
-  // 2. Bond Generation Logic
-  if (strategy === "all" || strategy === "bond_only") {
-    // Only generate if bond amount exists
-    if (tenRecord.bondAmount && tenRecord.bondAmount > 0) {
-      operations.push(
-        db.insert(invoice).values({
+      // B. Create Payment Link
+      await db.insert(invoicePayment).values({
+        invoiceId: newInv.id,
+        userId: tenRecord.userId,
+        amountOwed: amount,
+        status: "pending",
+      });
+
+      return true; // Success
+    } catch (err) {
+      console.error("Failed to create invoice/payment pair:", err);
+      // MANUAL ROLLBACK: If we created an invoice but failed afterwards, delete the invoice
+      if (newInvoiceId) {
+        await db.delete(invoice).where(eq(invoice.id, newInvoiceId));
+      }
+      throw err; // Re-throw to show error toast
+    }
+  };
+
+  try {
+    const messages = [];
+
+    // --- Bond Logic ---
+    if ((strategy === "all" || strategy === "bond_only") && tenRecord.bondAmount) {
+      await createInvoiceWithPayment(
+        {
           propertyId: tenRecord.propertyId,
-          type: "other", // or 'bond' if you add it to enum
+          type: "other",
           description: "Bond Payment",
           totalAmount: tenRecord.bondAmount,
-          dueDate: tenRecord.startDate, // Bond due on start date
+          dueDate: tenRecord.startDate,
           status: "open",
-          // Deterministic Key: bond-{tenancyId}
           idempotencyKey: `bond-${tenRecord.id}`,
-        }),
+        },
+        tenRecord.bondAmount,
       );
-      messages.push("Bond Invoice");
+      messages.push("Bond");
     }
-  }
 
-  // 3. Rent Catch-up Logic
-  if (strategy === "all" || strategy === "rent_only") {
-    // Use the logic we defined previously
-    const rentAction = await InvoiceService.calculateNextRent(tenRecord.property, tenRecord);
+    // --- Rent Logic ---
+    if (strategy === "all" || strategy === "rent_only") {
+      const rentAction = await InvoiceService.calculateNextRent(tenRecord.property, tenRecord);
+      console.log("Rent Action:", rentAction);
+      if (rentAction) {
+        await createInvoiceWithPayment(
+          {
+            propertyId: tenRecord.propertyId,
+            type: "rent",
+            description: `Rent (${rentAction.start.toLocaleDateString()} - ${rentAction.end.toLocaleDateString()})`,
+            totalAmount: rentAction.amountCents,
+            dueDate: rentAction.start,
+            status: "open",
+            idempotencyKey: rentAction.idempotencyKey,
+          },
+          rentAction.amountCents,
+        );
 
-    if (rentAction) {
-      // A. Create Invoice
-      const description = `Initial Rent (${rentAction.start.toLocaleDateString()} - ${rentAction.end.toLocaleDateString()})`;
-
-      operations.push(
-        db.insert(invoice).values({
-          propertyId: tenRecord.propertyId,
-          type: "rent",
-          description: description,
-          totalAmount: rentAction.amountCents,
-          dueDate: rentAction.start,
-          status: "open",
-          idempotencyKey: rentAction.idempotencyKey,
-        }),
-      );
-
-      // B. Update Tenancy "High Water Mark"
-      operations.push(
-        db
+        // Update Tenancy (Safe to do after invoice creation)
+        await db
           .update(tenancy)
           .set({ billedThroughDate: rentAction.end, updatedAt: new Date() })
-          .where(eq(tenancy.id, tenancyId)),
-      );
-      messages.push("Rent Catch-up Invoice");
-    }
-  }
-  // 4. Execute Batch
-  if (operations.length > 0) {
-    try {
-      await db.batch(operations as any);
+          .where(eq(tenancy.id, tenancyId));
 
-      // 5. Success Response
-      // Redirect to the tenancy details page to see the new invoices
-      flashToast(c, "Invoices Generated", { type: "success" });
-    } catch (e: any) {
-      // Handle idempotency (if user double-clicked or refreshed)
-      if (e.message.includes("UNIQUE constraint")) {
-        flashToast(c, "Invoices already exist.", { type: "info" });
+        messages.push("Rent");
       }
+    }
+
+    if (messages.length > 0) {
+      flashToast(c, `Generated: ${messages.join(", ")}`, { type: "success" });
+    } else {
+      flashToast(c, "No invoices generated (already up to date?)", { type: "info" });
+    }
+  } catch (e: any) {
+    // Handle idempotency (Unique constraint violation)
+    if (e.message?.includes("UNIQUE constraint") || e.message?.includes("idempotency")) {
+      flashToast(c, "Invoices already exist", { type: "info" });
+    } else {
       flashToast(c, "Database Error", { type: "error" });
     }
-    return htmxRedirect(c, `/admin/tenancies`);
-  } else {
-    // Nothing to do
-    return htmxRedirect(c, `/admin/tenancies`);
   }
+
+  return htmxRedirect(c, `/admin/tenancies`);
 });
 // 9. DELETE /:id (Delete Invoice)
 invoiceRoute.delete("/:id", async (c) => {

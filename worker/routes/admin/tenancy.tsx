@@ -214,6 +214,16 @@ tenancyRoute.post("/", zValidator("form", createTenancyFormSchema), async (c) =>
     const [targetUser] = await db.select().from(users).where(eq(users.email, data.email));
     if (!targetUser) return renderError("User not found.", "email");
 
+    // B1. Check if user already has an active tenancy for this property
+    const [existingTenancy] = await db
+      .select()
+      .from(tenancy)
+      .where(and(eq(tenancy.userId, targetUser.id), ne(tenancy.status, "closed")));
+
+    if (existingTenancy) {
+      return renderError(`This user already has an active tenancy.`, "email");
+    }
+
     // C. Validate Room Availability (Backend Check)
     if (data.roomId) {
       const [targetRoom] = await db

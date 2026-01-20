@@ -4,6 +4,7 @@ import { html } from "hono/html";
 import { Invoice } from "../../schema/invoice.schema";
 import { Property } from "../../schema/property.schema";
 import { InvoicePayment } from "../../schema/invoicePayment.schema";
+import { is } from "drizzle-orm";
 
 // Types
 type PaymentWithUser = InvoicePayment & {
@@ -46,6 +47,7 @@ const InvoiceStatusBadge = (status: string) => {
 export const TenantSection = ({
   splits,
   isLocked,
+  isEdit = false,
 }: {
   splits: {
     userId: string;
@@ -55,6 +57,7 @@ export const TenantSection = ({
     extensionDays: number;
   }[];
   isLocked: boolean;
+  isEdit?: boolean;
 }) => {
   return html`
     <div class="space-y-4 animate-in fade-in">
@@ -62,7 +65,7 @@ export const TenantSection = ({
         <h3 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
           Tenant Splits
         </h3>
-        ${!isLocked
+        ${!isLocked && !isEdit
           ? html`<span class="text-xs text-muted-foreground">Adjust amounts below</span>`
           : ""}
       </div>
@@ -94,7 +97,7 @@ export const TenantSection = ({
                       name="tenantAmounts[]"
                       value="${(split.amountCents / 100).toFixed(2)}"
                       required
-                      ${isLocked
+                      ${isLocked || isEdit
                         ? "readonly class='bg-transparent border-none font-semibold text-right'"
                         : "class='w-full rounded border px-2 py-1'"} />
                   </td>
@@ -198,7 +201,7 @@ export const InvoiceForm = ({
             <div class="space-y-2">
               <label class="text-sm font-medium">Property</label>
               ${
-                isLocked
+                isLocked || isEdit
                   ? html`
                       <div class="p-2 bg-muted rounded text-sm font-medium border">
                         ${properties.find((p) => p.id === invoice?.propertyId)?.nickname ||
@@ -251,8 +254,8 @@ export const InvoiceForm = ({
                 name="amountDollars"
                 value="${amountInDollars}"
                 placeholder="0.00"
-                ${isLocked ? "readonly" : ""}
-                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ${isLocked ? "bg-muted text-muted-foreground" : ""}"
+                ${isLocked || isEdit ? "readonly" : ""}
+                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ${isLocked || isEdit ? "bg-muted text-muted-foreground" : ""}"
                 
                 // Optional: Auto-refresh splits when amount changes (if desired)
                 hx-get="/admin/invoices/fragments/tenant-section"
@@ -264,7 +267,7 @@ export const InvoiceForm = ({
 
             <div class="space-y-2">
               <label class="text-sm font-medium">Due Date</label>
-              <input type="date" name="dueDate" value="${dueDateStr}" class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+              <input type="date" name="dueDate" value="${dueDateStr}" ${isLocked || isEdit ? "readonly" : ""} class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
             </div>
             
             <div class="space-y-2 md:col-span-2">
@@ -274,7 +277,7 @@ export const InvoiceForm = ({
           </div>
 
           <div id="tenant-section-container" class="pt-6 border-t">
-             ${TenantSection({ splits, isLocked })}
+             ${TenantSection({ splits, isLocked, isEdit })}
           </div>
 
           

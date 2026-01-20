@@ -197,14 +197,16 @@ export const InvoiceService = {
       status: string;
     },
   ) {
-    if (!["active", "move_in_ready"].includes(ten.status)) return null;
+    if (!["active", "move_in_ready", "pending_agreement", "bond_pending"].includes(ten.status)) {
+      return null;
+    }
 
     const today = startOfDay(new Date());
     // The billing period starts immediately after the last billed date
     const periodStart = startOfDay(ten.billedThroughDate);
 
     // Guard: Don't generate invoices too far in the future (e.g., 14 days buffer)
-    if (differenceInDays(periodStart, today) > 14) return null;
+    if (differenceInDays(periodStart, today) > 60) return null;
 
     let periodEnd: Date;
     let description = "";
