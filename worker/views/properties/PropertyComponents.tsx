@@ -83,6 +83,7 @@ export const PropertyForm = ({
           hx-get="/admin/properties"
           hx-target="#main-content"
           hx-swap="innerHTML"
+          hx-push-url="true"
           class="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
           <i data-lucide="arrow-left" class="w-4 h-4"></i> Back to list
         </button>
@@ -111,7 +112,7 @@ export const PropertyForm = ({
                 (t) =>
                   html`<option value="${t}" ${prop?.propertyType === t ? "selected" : ""}>
                     ${t.charAt(0).toUpperCase() + t.slice(1)}
-                  </option>`
+                  </option>`,
               )}
             </select>
           </div>
@@ -302,7 +303,7 @@ export const PropertyForm = ({
               "border",
               "border-input",
               "bg-background",
-              "text-sm"
+              "text-sm",
             );
 
             // Mount

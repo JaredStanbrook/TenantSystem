@@ -194,6 +194,7 @@ export const TenancyForm = ({
         hx-get="/admin/tenancies"
         hx-push-url="true"
         hx-target="#main-content"
+        hx-push-url="true"
         class="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 px-2 py-1 rounded-md hover:bg-muted transition-colors">
         <i data-lucide="arrow-left" class="w-4 h-4"></i> Back
       </button>
@@ -251,7 +252,7 @@ export const TenancyForm = ({
                   <option value="${p.id}" ${tenancy?.propertyId === p.id ? "selected" : ""}>
                     ${p.nickname || p.addressLine1}
                   </option>
-                `
+                `,
               )}
             </select>
           </div>
@@ -271,7 +272,7 @@ export const TenancyForm = ({
                   <option value="${r.id}" ${tenancy?.roomId === r.id ? "selected" : ""}>
                     ${r.name} (${r.status ? r.status.replace("_", " ") : "Unknown"})
                   </option>
-                `
+                `,
               )}
             </select>
           </div>
@@ -377,7 +378,7 @@ export const TenancyStatusManager = ({
             <option value="${status}" selected disabled>Change Status...</option>
             ${TENANCY_STATUS_VALUES.map(
               (s) =>
-                html`<option value="${s}">Move to: ${capitalize(s.replace(/_/g, " "))}</option>`
+                html`<option value="${s}">Move to: ${capitalize(s.replace(/_/g, " "))}</option>`,
             )}
           </select>
 

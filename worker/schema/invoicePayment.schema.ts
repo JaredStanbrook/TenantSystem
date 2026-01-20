@@ -6,6 +6,8 @@ import { sql } from "drizzle-orm";
 import { users } from "./auth.schema";
 import { invoice } from "./invoice.schema";
 
+export const PAYMENT_STATUS_VALUES = ["pending", "partial", "paid", "overdue", "void"] as const;
+
 export const invoicePayment = sqliteTable("invoice_payment", {
   id: integer("id").primaryKey({ autoIncrement: true }),
 
@@ -21,9 +23,7 @@ export const invoicePayment = sqliteTable("invoice_payment", {
   amountPaid: integer("amount_paid").default(0).notNull(),
 
   // Authoritative Status
-  status: text("status", { enum: ["pending", "partial", "paid", "overdue"] })
-    .default("pending")
-    .notNull(),
+  status: text("status", { enum: PAYMENT_STATUS_VALUES }).default("pending").notNull(),
 
   paidAt: integer("paid_at", { mode: "timestamp" }),
 
@@ -42,7 +42,7 @@ export const invoicePayment = sqliteTable("invoice_payment", {
   extensionReason: text("extension_reason"),
 
   // Authoritative Extension (set by Admin)
-  dueDateExtensionDays: integer("due_date_extension_days").default(0),
+  dueDateExtensionDays: integer("due_date_extension_days").default(0).notNull(),
 
   // Admin Feedback
   adminNote: text("admin_note"),

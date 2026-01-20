@@ -33,6 +33,7 @@ export const RoomRow = ({ room }: { room: SafeRoom & { baseRentAmount?: number |
         hx-get="/admin/rooms/${room.id}/edit"
         hx-target="#main-content"
         hx-swap="innerHTML"
+        hx-push-url="true"
         class="inline-flex items-center justify-center rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring border border-input bg-background hover:bg-accent hover:text-accent-foreground h-8 w-8"
         aria-label="Edit room">
         <i data-lucide="settings-2" class="w-4 h-4"></i>
@@ -133,7 +134,7 @@ export const RoomForm = ({ room, action }: { room: any; action: string }) => htm
                 <option value="${s}" ${room.status === s ? "selected" : ""}>
                   ${capitalize(s.replace("_", " "))}
                 </option>
-              `
+              `,
             )}
           </select>
         </div>
@@ -158,6 +159,7 @@ export const RoomForm = ({ room, action }: { room: any; action: string }) => htm
             type="button"
             hx-get="/admin/properties/${room.propertyId}/rooms"
             hx-target="#main-content"
+            hx-push-url="true"
             class="px-4 py-2 text-sm font-medium hover:bg-accent rounded-lg transition-colors">
             Cancel
           </button>

@@ -99,36 +99,3 @@ export const ConfirmationDialog = (props: ConfirmationDialogProps) => {
     </div>
   `;
 };
-
-export const ForceConfirmationModal = ({ id, status }: { id: number; status: string }) => {
-  return html`
-    <div id="modal-container" hx-swap-oob="innerHTML">
-      <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div class="bg-white p-6 rounded-lg shadow-xl max-w-sm border">
-          <h3 class="font-bold text-lg text-red-600">Invalid Transition</h3>
-          <p class="text-sm text-gray-600 mt-2">
-            Moving to <strong>${status}</strong> is not a standard step. Do you want to force this
-            change?
-          </p>
-          <div class="mt-6 flex justify-end gap-3">
-            <button
-              onclick="document.getElementById('modal-container').innerHTML = ''"
-              class="px-4 py-2 text-sm font-medium border rounded-md">
-              Cancel
-            </button>
-
-            <button
-              hx-patch="/admin/tenancies/${id}/status"
-              hx-vals='{"status": "${status}", "force": true}'
-              hx-target="#tenancy-status-card-${id}"
-              hx-swap="outerHTML"
-              hx-on::after-request="document.getElementById('modal-container').innerHTML = ''"
-              class="px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-md hover:bg-red-700">
-              Yes, Force Update
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-};

@@ -15,6 +15,7 @@ import { htmxResponse, htmxToast, htmxPushUrl } from "@server/lib/htmx-helpers";
 import type { AppEnv } from "@server/types";
 import app from "@server/app";
 import { PropertySelector } from "@views/components/NavBar";
+import { SelectionDialog } from "@server/views/components/SelectionDialog";
 
 export const propertyRoute = new Hono<AppEnv>();
 
@@ -50,7 +51,7 @@ propertyRoute.get("/:propId/rooms", async (c) => {
   return htmxResponse(
     c,
     `${prop.nickname || "Property"} Rooms`,
-    RoomTable({ rooms, propertyName: prop.nickname || prop.addressLine1, propertyId: propId })
+    RoomTable({ rooms, propertyName: prop.nickname || prop.addressLine1, propertyId: propId }),
   );
 });
 
@@ -135,7 +136,7 @@ propertyRoute.post(
         })}
       </div>
     `);
-  }
+  },
 );
 
 // 4. GET /admin/properties/:id/edit -> Render Edit Form
@@ -156,7 +157,7 @@ propertyRoute.get("/:id/edit", async (c) => {
     PropertyForm({
       prop,
       action: `/admin/properties/${id}/update`,
-    })
+    }),
   );
 });
 
@@ -179,7 +180,7 @@ propertyRoute.post(
           prop: { ...rawBody, id: Number(id) },
           action: `/admin/properties/${id}/update`,
           errors: fieldErrors,
-        })
+        }),
       );
     }
   }),
@@ -204,18 +205,45 @@ propertyRoute.post(
 
     // --- INTERCEPTION LOGIC ---
     if (targetCount !== currentCount && !data.rentStrategy) {
+      // 1. Calculate variables for the message logic
+      const isAdding = targetCount > currentCount;
+      const diff = Math.abs(targetCount - currentCount);
+      const actionText = isAdding ? "adding" : "removing";
+
       return c.html(html`
         ${PropertyForm({
           prop: { ...data, id },
           action: `/admin/properties/${id}/update`,
         })}
-        ${RentReconciliationModal({
-          id,
-          currentCount,
-          targetCount,
-          currentRent: existing.rentAmount,
-          targetRent: data.rentAmount,
-          formPayload: data,
+        ${SelectionDialog({
+          title: "Rent Adjustment Required",
+          message: `You are ${actionText} <strong>${diff} room(s)</strong>. How should this affect the rent?`,
+
+          choices: [
+            {
+              label: `Keep Property Rent at $${data.rentAmount}`,
+              value: "distribute_property_rent",
+              description: `Rescale ${isAdding ? "all" : "remaining"} room prices proportionally.`,
+              icon: "scale",
+              target: "#main-content",
+            },
+            {
+              label: "Preserve Individual Room Rates",
+              value: "preserve_room_rates",
+              description: "Keep existing room prices. Property rent updates automatically.",
+              icon: "lock",
+              target: "#main-content",
+            },
+          ],
+
+          submitConfig: {
+            url: `/admin/properties/${id}/update`,
+            method: "post",
+            selectionKey: "rentStrategy",
+            payload: data,
+            // You can leave target undefined here since we override it above
+            // Or set a default: target: "#main-content"
+          },
         })}
       `);
     }
@@ -255,7 +283,7 @@ propertyRoute.post(
       // Update ALL kept rooms to be even
       for (const r of roomsToKeep) {
         batchOperations.push(
-          db.update(room).set({ baseRentAmount: newRoomBaseRent }).where(eq(room.id, r.id))
+          db.update(room).set({ baseRentAmount: newRoomBaseRent }).where(eq(room.id, r.id)),
         );
       }
     }
@@ -266,7 +294,7 @@ propertyRoute.post(
       db
         .update(property)
         .set({ ...data, rentAmount: finalPropertyRent, updatedAt: new Date() })
-        .where(eq(property.id, id))
+        .where(eq(property.id, id)),
     );
 
     // Add Rooms
@@ -279,7 +307,7 @@ propertyRoute.post(
             name: `Room ${currentCount + i + 1}`,
             status: "vacant_ready",
             baseRentAmount: newRoomBaseRent, // Uses 0 for preserve, or the even split for distribute
-          })
+          }),
         );
       }
     }
@@ -319,7 +347,7 @@ propertyRoute.post(
 
       <div hx-swap-oob="innerHTML:#modal-container"></div>
     `);
-  }
+  },
 );
 
 // 6. DELETE /admin/properties/:id -> Handle Delete

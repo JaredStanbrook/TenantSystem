@@ -1,38 +1,39 @@
 // worker/views/invoices/InvoiceComponents.tsx
+// worker/views/invoices/InvoiceComponents.tsx
 import { html } from "hono/html";
 import { Invoice } from "../../schema/invoice.schema";
 import { Property } from "../../schema/property.schema";
-import { InvoicePayment } from "../../schema/invoicePayment.schema"; // Ensure this is exported/available
+import { InvoicePayment } from "../../schema/invoicePayment.schema";
 
-// Types for the view
+// Types
 type PaymentWithUser = InvoicePayment & {
-  userDisplayName: string;
-  userEmail: string;
+  userDisplayName?: string;
+  userEmail?: string;
 };
 
+// --- Helpers ---
 const formatMoney = (cents: number) =>
   new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(cents / 100);
 
-const formatDate = (date: Date | null | undefined) =>
-  date ? new Intl.DateTimeFormat("en-AU", { dateStyle: "medium" }).format(date) : "-";
+const formatDate = (date: Date | null | undefined | string) => {
+  if (!date) return "-";
+  const d = typeof date === "string" ? new Date(date) : date;
+  return new Intl.DateTimeFormat("en-AU", { dateStyle: "medium" }).format(d);
+};
 
-const InvoiceStatusBadge = (status: string, dueDate: Date, isFullyPaid: boolean) => {
-  const isOverdue = !isFullyPaid && new Date() > new Date(dueDate);
-
-  // Logic: Use DB status, but override visually if overdue and still 'open'
+const InvoiceStatusBadge = (status: string) => {
   let label = status;
   let classes = "bg-gray-100 text-gray-800";
 
-  if (status === "paid" || isFullyPaid) {
+  if (status === "paid") {
     label = "Paid";
     classes = "bg-green-100 text-green-800";
   } else if (status === "void") {
     classes = "bg-gray-200 text-gray-500 line-through";
-  } else if (status === "overdue" || isOverdue) {
+  } else if (status === "overdue") {
     label = "Overdue";
     classes = "bg-red-100 text-red-800";
   } else {
-    // Open
     classes = "bg-blue-50 text-blue-700";
   }
 
@@ -41,376 +42,326 @@ const InvoiceStatusBadge = (status: string, dueDate: Date, isFullyPaid: boolean)
     ${label}
   </span>`;
 };
-// --- New Component: Tenant Action Row ---
-const TenantStatusRow = (payment: PaymentWithUser, invoice: Invoice) => {
-  const isPaid = payment.status === "paid";
-  const isPendingPayment = !isPaid && payment.tenantMarkedPaidAt;
-  const isPendingExtension = payment.extensionStatus === "pending";
 
+export const TenantSection = ({
+  splits,
+  isLocked,
+}: {
+  splits: {
+    userId: string;
+    userDisplayName?: string;
+    userEmail?: string;
+    amountCents: number;
+    extensionDays: number;
+  }[];
+  isLocked: boolean;
+}) => {
   return html`
-    <tr class="transition-colors hover:bg-muted/50">
-      <td class="p-4 align-middle">
-        <div class="flex flex-col">
-          <span class="font-medium">${payment.userDisplayName || "Unknown"}</span>
-          <span class="text-xs text-muted-foreground">${payment.userEmail}</span>
-        </div>
-      </td>
-      <td class="p-4 align-middle font-semibold">${formatMoney(payment.amountOwed)}</td>
-      <td class="p-4 align-middle">
-        <div class="space-y-1">
-          <div class="flex items-center gap-2">
-            ${isPaid
-              ? html`<span
-                  class="inline-flex items-center rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-700"
-                  >Paid</span
-                >`
-              : isPendingPayment
-              ? html`<span
-                  class="inline-flex items-center rounded-full bg-orange-100 px-2 py-1 text-xs font-medium text-orange-800"
-                  >Payment Reported</span
-                >`
-              : html`<span
-                  class="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600 capitalize"
-                  >${payment.status}</span
-                >`}
-          </div>
+    <div class="space-y-4 animate-in fade-in">
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+          Tenant Splits
+        </h3>
+        ${!isLocked
+          ? html`<span class="text-xs text-muted-foreground">Adjust amounts below</span>`
+          : ""}
+      </div>
 
-          ${payment.extensionStatus !== "none"
-            ? html` <div class="text-xs mt-1">
-                <span class="font-medium">Extension:</span>
-                <span
-                  class="${payment.extensionStatus === "approved"
-                    ? "text-green-600"
-                    : payment.extensionStatus === "rejected"
-                    ? "text-red-600"
-                    : "text-orange-600"} capitalize">
-                  ${payment.extensionStatus}
-                </span>
-              </div>`
-            : ""}
-        </div>
-      </td>
-      <td class="p-4 align-middle text-sm text-muted-foreground">
-        ${isPendingPayment
-          ? html` <div>
-              <span class="font-medium text-foreground">Ref:</span> ${payment.paymentReference ||
-              "N/A"}
-              <br />
-              <span class="text-xs">Reported: ${formatDate(payment.tenantMarkedPaidAt)}</span>
-            </div>`
+      <div class="rounded-md border bg-muted/20 overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="bg-muted/50 text-left">
+            <tr>
+              <th class="p-3 font-medium">Tenant</th>
+              <th class="p-3 font-medium w-32">Amount ($)</th>
+              <th class="p-3 font-medium w-24">Ext (Days)</th>
+            </tr>
+          </thead>
+          <tbody id="tenant-rows">
+            ${splits.map(
+              (split) => html`
+                <tr class="border-t border-muted/20">
+                  <td class="p-3">
+                    <div class="font-medium">
+                      ${split.userDisplayName || split.userEmail?.split("@")[0]}
+                    </div>
+                    <div class="text-xs text-muted-foreground">${split.userEmail}</div>
+                    <input type="hidden" name="tenantIds[]" value="${split.userId}" />
+                  </td>
+                  <td class="p-3">
+                    <input
+                      type="number"
+                      step="0.01"
+                      name="tenantAmounts[]"
+                      value="${(split.amountCents / 100).toFixed(2)}"
+                      required
+                      ${isLocked
+                        ? "readonly class='bg-transparent border-none font-semibold text-right'"
+                        : "class='w-full rounded border px-2 py-1'"} />
+                  </td>
+                  <td class="p-3">
+                    <input
+                      type="number"
+                      name="tenantExtensions[]"
+                      value="${split.extensionDays}"
+                      min="0"
+                      ${isLocked
+                        ? "readonly class='bg-transparent border-none text-right'"
+                        : "class='w-full rounded border px-2 py-1'"} />
+                  </td>
+                </tr>
+              `,
+            )}
+          </tbody>
+        </table>
+
+        ${splits.length === 0
+          ? html`
+              <div class="p-6 text-center text-muted-foreground text-sm">
+                <p>Select a property above to load active tenants.</p>
+              </div>
+            `
           : ""}
-        ${isPendingExtension
-          ? html` <div class="mt-2 pt-2 border-t border-dashed">
-              <span class="font-medium text-foreground">Req:</span> ${formatDate(
-                payment.extensionRequestedDate
-              )}
-              <br />
-              <span class="italic text-xs">"${payment.extensionReason}"</span>
-            </div>`
-          : ""}
-      </td>
-      <td class="p-4 align-middle text-right">
-        <div class="flex flex-col gap-2 items-end">
-          ${isPendingPayment
-            ? html` <div class="flex items-center gap-1">
-                <button
-                  hx-post="/admin/invoices/${invoice.id}/payment/${payment.id}/approve"
-                  hx-target="#main-content"
-                  class="inline-flex items-center justify-center rounded-md bg-green-600 px-2 py-1 text-xs font-medium text-white hover:bg-green-700 shadow-sm">
-                  Confirm Paid
-                </button>
-                <button
-                  hx-post="/admin/invoices/${invoice.id}/payment/${payment.id}/reject"
-                  hx-prompt="Reason for rejection:"
-                  hx-target="#main-content"
-                  class="inline-flex items-center justify-center rounded-md border border-input bg-background px-2 py-1 text-xs font-medium hover:bg-accent hover:text-destructive">
-                  Reject
-                </button>
-              </div>`
-            : ""}
-          ${isPendingExtension
-            ? html` <div class="flex items-center gap-1">
-                <button
-                  hx-post="/admin/invoices/${invoice.id}/extension/${payment.id}/approve"
-                  hx-target="#main-content"
-                  class="inline-flex items-center justify-center rounded-md bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700 shadow-sm">
-                  Approve Ext
-                </button>
-                <button
-                  hx-post="/admin/invoices/${invoice.id}/extension/${payment.id}/reject"
-                  hx-target="#main-content"
-                  class="inline-flex items-center justify-center rounded-md border border-input bg-background px-2 py-1 text-xs font-medium hover:bg-accent hover:text-destructive">
-                  Reject
-                </button>
-              </div>`
-            : ""}
-          ${!isPendingPayment && !isPendingExtension && !isPaid
-            ? html`<span class="text-xs text-muted-foreground">No pending actions</span>`
-            : ""}
-        </div>
-      </td>
-    </tr>
+      </div>
+
+      ${!isLocked && splits.length > 0
+        ? html`
+            <p class="text-xs text-right text-muted-foreground">
+              <i data-lucide="info" class="w-3 h-3 inline mr-1"></i>
+              Ensure splits sum to Total Amount.
+            </p>
+          `
+        : ""}
+    </div>
   `;
 };
 
-export const AssignTenantModal = (
-  invoiceId: number,
-  availableTenants: Partial<SelectUser>[]
-) => html`
-  <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm animate-in fade-in">
-    <div
-      class="bg-card w-full max-w-md border rounded-lg shadow-lg p-6 space-y-6 m-4"
-      onclick="event.stopPropagation()">
-      <div class="flex justify-between items-center">
-        <h3 class="text-lg font-semibold">Assign Tenant</h3>
-        <button
-          onclick="this.closest('.fixed').remove()"
-          class="text-muted-foreground hover:text-foreground">
-          <i data-lucide="x" class="w-5 h-5"></i>
-        </button>
-      </div>
-
-      <form hx-post="/admin/invoices/${invoiceId}/assign" hx-target="#main-content">
-        <div class="space-y-4">
-          <div class="space-y-2">
-            <label class="text-sm font-medium">Tenant</label>
-            <select
-              name="userId"
-              required
-              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-              <option value="" disabled selected>Select a tenant...</option>
-              ${availableTenants.map(
-                (t) => html`<option value="${t.id}">${t.displayName || t.email}</option>`
-              )}
-            </select>
-            ${availableTenants.length === 0
-              ? html`<p class="text-xs text-destructive">No unassigned tenants available.</p>`
-              : ""}
-          </div>
-
-          <div class="grid grid-cols-2 gap-4">
-            <div class="space-y-2">
-              <label class="text-sm font-medium">Amount ($)</label>
-              <input
-                type="number"
-                name="amountDollars"
-                step="0.01"
-                min="0.01"
-                required
-                placeholder="0.00"
-                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
-            </div>
-
-            <div class="space-y-2">
-              <label class="text-sm font-medium">Extension (Days)</label>
-              <input
-                type="number"
-                name="extensionDays"
-                min="0"
-                placeholder="0"
-                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
-            </div>
-          </div>
-          <p class="text-xs text-muted-foreground">
-            The tenant will see a due date adjusted by the extension days.
-          </p>
-        </div>
-
-        <div class="flex justify-end gap-3 mt-6">
-          <button
-            type="button"
-            onclick="this.closest('.fixed').remove()"
-            class="px-4 py-2 text-sm font-medium hover:bg-accent rounded-md">
-            Cancel
-          </button>
-          <button
-            type="submit"
-            ${availableTenants.length === 0 ? "disabled" : ""}
-            class="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded-md disabled:opacity-50">
-            Assign
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-`;
-
-// --- Updated InvoiceForm ---
+// Updated Invoice Form
 export const InvoiceForm = ({
   invoice,
   properties,
   payments = [],
   action,
   page = "1",
+  isLocked = false,
 }: {
   invoice?: Partial<Invoice>;
   properties: Property[];
   payments?: PaymentWithUser[];
   action: string;
   page?: string | number;
+  isLocked?: boolean;
 }) => {
   const amountInDollars = invoice?.totalAmount ? (invoice.totalAmount / 100).toFixed(2) : "";
   const dueDateStr = invoice?.dueDate ? new Date(invoice.dueDate).toISOString().split("T")[0] : "";
   const isEdit = !!invoice?.id;
 
+  // Prepare splits for the TenantSection
+  const splits = payments.map((p) => ({
+    userId: p.userId,
+    userDisplayName: p.userDisplayName,
+    userEmail: p.userEmail,
+    amountCents: p.amountOwed,
+    extensionDays: p.dueDateExtensionDays || 0,
+  }));
+
   return html`
-    <div class="max-w-7xl mx-auto space-y-8 p-8 pt-20 animate-in fade-in duration-500">
+    <div class="max-w-3xl mx-auto space-y-8 p-8 pt-20 animate-in fade-in">
+      
       <div class="flex items-center justify-between">
         <div>
           <h2 class="text-3xl font-bold tracking-tight">
-            ${isEdit ? "Manage Invoice" : "Create Invoice"}
+            ${isEdit ? "Manage Invoice" : "New Invoice"}
           </h2>
-          <p class="text-muted-foreground mt-1">
-            ${isEdit ? "Review tenant status and update details." : "Bill your tenants."}
-          </p>
+          ${
+            isLocked
+              ? html`
+                  <span
+                    class="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800 mt-2">
+                    <i data-lucide="lock" class="w-3 h-3 mr-1"></i>
+                    Financials Locked (Payments Active)
+                  </span>
+                `
+              : ""
+          }
         </div>
-        <button
-          hx-get="/admin/invoices?page=${page}"
-          hx-push-url="true"
-          hx-target="#main-content"
-          class="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-          <i data-lucide="arrow-left" class="w-4 h-4"></i>
-          Back to Invoices
+        <button hx-get="/admin/invoices?page=${page}" hx-target="#main-content" class="text-sm text-muted-foreground hover:text-foreground">
+          &larr; Back to Invoices
         </button>
       </div>
 
-      <div class="grid gap-8 lg:grid-cols-3">
-        <div class="lg:col-span-2 space-y-8">
-          <form
-            hx-post="${action}"
-            hx-target="#main-content"
-            class="space-y-6 border rounded-lg p-6 bg-card text-card-foreground shadow-sm">
-            <input type="hidden" name="page" value="${page}" />
-            <div class="grid gap-4 md:grid-cols-2">
-              <div class="space-y-2">
-                <label class="text-sm font-medium">Property</label>
-                <select
-                  name="propertyId"
-                  class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-                  ${properties.map(
-                    (p) =>
-                      html`<option
-                        value="${p.id}"
-                        ${invoice?.propertyId === p.id ? "selected" : ""}>
-                        ${p.nickname || p.addressLine1}
-                      </option>`
-                  )}
-                </select>
-              </div>
-              <div class="space-y-2">
-                <label class="text-sm font-medium">Bill Type</label>
-                <select
-                  name="type"
-                  class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-                  ${["rent", "water", "electricity", "gas", "internet", "maintenance", "other"].map(
-                    (t) =>
-                      html`<option value="${t}" ${invoice?.type === t ? "selected" : ""}>
-                        ${t.charAt(0).toUpperCase() + t.slice(1)}
-                      </option>`
-                  )}
-                </select>
-              </div>
-            </div>
+      <form hx-post="${action}" hx-target="#main-content" class="space-y-6">
+        <input type="hidden" name="page" value="${page}" />
+        
+        <div class="space-y-8 border rounded-lg p-8 bg-card shadow-sm">
+          
+          <div class="grid gap-6 md:grid-cols-2">
             <div class="space-y-2">
-              <label class="text-sm font-medium">Description</label>
-              <input
-                name="description"
-                value="${invoice?.description || ""}"
-                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+              <label class="text-sm font-medium">Property</label>
+              ${
+                isLocked
+                  ? html`
+                      <div class="p-2 bg-muted rounded text-sm font-medium border">
+                        ${properties.find((p) => p.id === invoice?.propertyId)?.nickname ||
+                        "Unknown"}
+                        <input type="hidden" name="propertyId" value="${invoice?.propertyId}" />
+                      </div>
+                    `
+                  : html`
+                      <select
+                        name="propertyId"
+                        class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        hx-get="/admin/invoices/fragments/tenant-section"
+                        hx-target="#tenant-section-container"
+                        hx-include="[name='amountDollars']">
+                        <option value="" disabled ${!invoice?.propertyId ? "selected" : ""}>
+                          Select Property...
+                        </option>
+                        ${properties.map(
+                          (p) => html`
+                            <option
+                              value="${p.id}"
+                              ${invoice?.propertyId === p.id ? "selected" : ""}>
+                              ${p.nickname || p.addressLine1}
+                            </option>
+                          `,
+                        )}
+                      </select>
+                    `
+              }
             </div>
-            <div class="grid gap-4 md:grid-cols-2">
-              <div class="space-y-2">
-                <label class="text-sm font-medium">Total Amount ($)</label>
-                <input
-                  type="number"
-                  name="amountDollars"
-                  step="0.01"
-                  value="${amountInDollars}"
-                  class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
-              </div>
-              <div class="space-y-2">
-                <label class="text-sm font-medium">Due Date</label>
-                <input
-                  type="date"
-                  name="dueDate"
-                  value="${dueDateStr}"
-                  class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
-              </div>
-            </div>
-            <div class="flex justify-end pt-4 border-t">
-              <button
-                type="submit"
-                class="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-10 items-center justify-center rounded-md px-4 py-2 text-sm font-medium">
-                Save Changes
-              </button>
-            </div>
-          </form>
-        </div>
 
-        ${isEdit
-          ? html` <div class="lg:col-span-1">
-              <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
-                <div class="p-6 border-b flex justify-between items-center">
-                  <div>
-                    <h3 class="text-lg font-semibold">Tenant Breakdown</h3>
-                    <p class="text-sm text-muted-foreground">Review payments.</p>
-                  </div>
-                  <button
-                    hx-get="/admin/invoices/${invoice?.id}/assign"
-                    hx-target="#modal-container"
-                    class="inline-flex items-center justify-center rounded-md bg-secondary text-primary-foreground hover:bg-secondary/80 h-8 px-3 text-xs font-medium">
-                    <i data-lucide="plus" class="w-3 h-3 mr-1"></i>
-                    Assign
-                  </button>
-                </div>
-                <div class="p-0 overflow-auto">
-                  <table class="w-full caption-bottom text-sm">
-                    <tbody>
-                      ${payments.length === 0
-                        ? html`<tr>
-                            <td class="p-6 text-center text-muted-foreground">
-                              No tenants assigned.
-                            </td>
-                          </tr>`
-                        : payments.map((p) => TenantStatusRow(p, invoice as Invoice))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>`
-          : html`
-              <div class="lg:col-span-1">
-                <div class="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
-                  Save the invoice to assign tenants.
-                </div>
-              </div>
-            `}
-      </div>
+            <div class="space-y-2">
+              <label class="text-sm font-medium">Bill Type</label>
+              <select name="type" class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                 ${["rent", "water", "electricity", "gas", "internet", "maintenance", "other"].map(
+                   (t) => html`
+                     <option value="${t}" ${invoice?.type === t ? "selected" : ""}>
+                       ${t.toUpperCase()}
+                     </option>
+                   `,
+                 )}
+              </select>
+            </div>
+
+            <div class="space-y-2">
+              <label class="text-sm font-medium">Total Amount ($)</label>
+              <input
+                type="number"
+                step="0.01"
+                name="amountDollars"
+                value="${amountInDollars}"
+                placeholder="0.00"
+                ${isLocked ? "readonly" : ""}
+                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ${isLocked ? "bg-muted text-muted-foreground" : ""}"
+                
+                // Optional: Auto-refresh splits when amount changes (if desired)
+                hx-get="/admin/invoices/fragments/tenant-section"
+                hx-target="#tenant-section-container"
+                hx-trigger="keyup delay:500ms changed"
+                hx-include="[name='propertyId']"
+              />
+            </div>
+
+            <div class="space-y-2">
+              <label class="text-sm font-medium">Due Date</label>
+              <input type="date" name="dueDate" value="${dueDateStr}" class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+            </div>
+            
+            <div class="space-y-2 md:col-span-2">
+               <label class="text-sm font-medium">Description</label>
+               <input name="description" value="${invoice?.description || ""}" placeholder="e.g. Q3 Water Bill" class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+            </div>
+          </div>
+
+          <div id="tenant-section-container" class="pt-6 border-t">
+             ${TenantSection({ splits, isLocked })}
+          </div>
+
+          ${!isEdit ? RecurrenceOptions() : ""}
+          
+          <div class="flex justify-end pt-6 border-t">
+             <button type="submit" class="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-6 py-2.5 text-sm font-medium shadow">
+               ${isLocked ? "Update Non-Financials" : isEdit ? "Update Invoice" : "Create Invoice"}
+             </button>
+          </div>
+        </div>
+      </form>
     </div>
   `;
 };
+export const RecurrenceOptions = () => html`
+  <div class="rounded-md border p-4 bg-muted/20 space-y-4 mt-6">
+    <div class="flex items-start gap-3">
+      <div class="flex h-6 items-center">
+        <input
+          id="isRecurring"
+          name="isRecurring"
+          type="checkbox"
+          class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+          onchange="document.getElementById('recurrence-settings').classList.toggle('hidden', !this.checked)" />
+      </div>
+      <div class="text-sm">
+        <label for="isRecurring" class="font-medium text-gray-900">Repeat this invoice</label>
+        <p class="text-gray-500">Automatically generate future invoices with these splits.</p>
+      </div>
+    </div>
 
-// --- 1. Invoice Table Row ---
+    <div id="recurrence-settings" class="hidden space-y-4 pt-2 border-t border-gray-200">
+      <div class="grid grid-cols-2 gap-4">
+        <div class="space-y-2">
+          <label class="text-sm font-medium">Frequency</label>
+          <select
+            name="frequency"
+            class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+            <option value="weekly">Weekly</option>
+            <option value="fortnightly">Fortnightly</option>
+            <option value="monthly" selected>Monthly</option>
+            <option value="yearly">Yearly</option>
+          </select>
+        </div>
+        <div class="space-y-2">
+          <label class="text-sm font-medium">End Date (Optional)</label>
+          <input
+            type="date"
+            name="recurrenceEndDate"
+            class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+        </div>
+      </div>
+    </div>
+  </div>
+`;
+// --- 5. Invoice Table & Row ---
 export const InvoiceRow = ({
   invoice,
   propName,
   currentPage,
 }: {
-  invoice: InvoiceWithMeta;
+  invoice: any;
   propName: string;
   currentPage: number;
 }) => {
   const paid = invoice.amountPaid || 0;
   const total = invoice.totalAmount;
-  const percentage = Math.min(100, Math.round((paid / total) * 100));
-  const isFullyPaid = paid >= total;
+  const percentage = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
+  const isFullyPaid = paid >= total && total > 0;
+
+  // NEW: Check if this invoice came from a schedule
+  const isRecurring = !!invoice.recurringInvoiceId;
 
   return html`
     <tr class="hover:bg-muted/50 transition-colors border-b" id="invoice-row-${invoice.id}">
       <td class="p-4 align-middle">
         <div class="flex flex-col gap-1">
-          <span class="font-medium text-sm">${invoice.description || invoice.type}</span>
+          <div class="flex items-center gap-2">
+            <span class="font-medium text-sm">${invoice.description || invoice.type}</span>
+            ${isRecurring
+              ? html`<i
+                  data-lucide="repeat"
+                  class="w-3 h-3 text-blue-500/70"
+                  title="Auto-generated from Recurring Schedule">
+                </i>`
+              : ""}
+          </div>
           <div class="flex items-center gap-2">
             ${InvoiceStatusBadge(invoice.status, invoice.dueDate, isFullyPaid)}
             <span class="text-xs text-muted-foreground uppercase tracking-wider"
@@ -436,13 +387,11 @@ export const InvoiceRow = ({
               ? html`<span class="text-xs text-muted-foreground">${Math.round(percentage)}%</span>`
               : ""}
           </div>
-
-          <div class="h-1.5 w-full bg-destructive rounded-full overflow-hidden">
+          <div class="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
             <div
-              class="h-full ${isFullyPaid ? "bg-primary" : "bg-primary"} transition-all"
+              class="h-full ${isFullyPaid ? "bg-green-500" : "bg-primary"} transition-all"
               style="width: ${percentage}%"></div>
           </div>
-
           ${paid > 0 && !isFullyPaid
             ? html`<div class="text-[10px] text-muted-foreground text-right">
                 Paid: ${formatMoney(paid)}
@@ -456,19 +405,15 @@ export const InvoiceRow = ({
             hx-get="/admin/invoices/${invoice.id}/edit?page=${currentPage}"
             hx-push-url="true"
             hx-target="#main-content"
-            hx-swap="innerHTML"
-            class="inline-flex items-center justify-center rounded-lg text-sm font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground h-8 w-8"
-            aria-label="Edit invoice">
+            class="inline-flex items-center justify-center rounded-lg text-sm font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground h-8 w-8">
             <i data-lucide="pencil" class="w-4 h-4"></i>
           </button>
-
           <button
             hx-delete="/admin/invoices/${invoice.id}"
             hx-target="#invoice-row-${invoice.id}"
             hx-swap="outerHTML swap:0.5s"
             hx-confirm="Delete this invoice?"
-            class="inline-flex items-center justify-center rounded-lg text-sm font-medium border border-input bg-background hover:bg-destructive hover:text-destructive-foreground h-8 w-8"
-            aria-label="Delete invoice">
+            class="inline-flex items-center justify-center rounded-lg text-sm font-medium border border-input bg-background hover:bg-destructive hover:text-destructive-foreground h-8 w-8">
             <i data-lucide="trash-2" class="w-4 h-4"></i>
           </button>
         </div>
@@ -482,7 +427,7 @@ export const InvoiceTable = ({
   properties,
   pagination,
 }: {
-  invoices: InvoiceWithMeta[];
+  invoices: any[];
   properties: Property[];
   pagination: { page: number; totalPages: number };
 }) => {
@@ -495,18 +440,27 @@ export const InvoiceTable = ({
       <div class="flex items-center justify-between">
         <div>
           <h2 class="text-3xl font-bold tracking-tight">Invoices</h2>
-          <p class="text-muted-foreground mt-1">
-            Manage outgoing bills. (Page ${page} of ${totalPages})
-          </p>
+          <p class="text-muted-foreground mt-1">Manage outgoing bills and track payments.</p>
         </div>
-        <button
-          hx-get="/admin/invoices/create?page=${page}"
-          hx-target="#main-content"
-          hx-push-url="true"
-          class="inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2">
-          <i data-lucide="plus" class="w-4 h-4"></i>
-          New Invoice
-        </button>
+        <div class="flex gap-2">
+          <button
+            hx-get="/admin/invoices/recurring"
+            hx-target="#main-content"
+            hx-push-url="true"
+            class="inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium border border-input bg-background hover:bg-accent h-10 px-4 shadow-sm transition-colors">
+            <i data-lucide="repeat" class="w-4 h-4 text-muted-foreground"></i>
+            Recurring Schedules
+          </button>
+
+          <button
+            hx-get="/admin/invoices/create?page=${page}"
+            hx-target="#main-content"
+            hx-push-url="true"
+            class="inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 shadow transition-colors">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            New Invoice
+          </button>
+        </div>
       </div>
 
       <div class="rounded-lg border bg-card shadow-sm overflow-hidden">
@@ -533,7 +487,7 @@ export const InvoiceTable = ({
                     </td>
                   </tr>`
                 : invoices.map((i) =>
-                    InvoiceRow({ invoice: i, propName: i.propertyName, currentPage: page })
+                    InvoiceRow({ invoice: i, propName: i.propertyName, currentPage: page }),
                   )}
             </tbody>
           </table>
@@ -546,7 +500,7 @@ export const InvoiceTable = ({
             hx-get="/admin/invoices?page=${page - 1}"
             hx-push-url="true"
             hx-target="#main-content"
-            class="inline-flex items-center justify-center rounded-lg text-sm font-medium border border-input bg-background hover:bg-accent h-9 px-3 disabled:opacity-50 disabled:cursor-not-allowed">
+            class="btn-sm border bg-background hover:bg-accent disabled:opacity-50">
             Previous
           </button>
           <button
@@ -554,7 +508,7 @@ export const InvoiceTable = ({
             hx-get="/admin/invoices?page=${page + 1}"
             hx-push-url="true"
             hx-target="#main-content"
-            class="inline-flex items-center justify-center rounded-lg text-sm font-medium border border-input bg-background hover:bg-accent h-9 px-3 disabled:opacity-50 disabled:cursor-not-allowed">
+            class="btn-sm border bg-background hover:bg-accent disabled:opacity-50">
             Next
           </button>
         </div>

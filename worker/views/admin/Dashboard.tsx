@@ -96,7 +96,7 @@ const RecentInvoiceItem = (invoice: Invoice) => html`
     <div class="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto">
       <span
         class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ring-1 ring-inset ring-black/5 ${getStatusColor(
-          invoice.status
+          invoice.status,
         )}">
         ${capitalize(invoice.status)}
       </span>
@@ -250,6 +250,7 @@ export const Dashboard = ({
               <button
                 hx-get="/admin/properties/${property.id}/rooms"
                 hx-target="#main-content"
+                hx-push-url="true"
                 class="w-full inline-flex items-center justify-center rounded-md text-sm font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2">
                 Manage Rooms
               </button>
