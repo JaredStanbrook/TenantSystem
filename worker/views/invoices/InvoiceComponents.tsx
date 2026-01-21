@@ -48,19 +48,30 @@ export const TenantSection = ({
   splits,
   isLocked,
   isEdit = false,
+  invoiceId,
 }: {
   splits: {
+    id?: number; // Payment ID (for edit mode)
     userId: string;
     userDisplayName?: string;
     userEmail?: string;
     amountCents: number;
     extensionDays: number;
+    dueDateExtensionDays?: number;
+    status?: string;
+    tenantMarkedPaidAt?: Date | null;
+    paymentReference?: string | null;
+    extensionStatus?: "none" | "pending" | "approved" | "rejected";
+    extensionRequestedDate?: Date | null;
+    extensionReason?: string | null;
+    adminNote?: string | null;
   }[];
   isLocked: boolean;
   isEdit?: boolean;
+  invoiceId?: number;
 }) => {
   return html`
-    <div class="space-y-4 animate-in fade-in">
+    <div class="space-y-4 animate-in fade-in" id="tenant-section-container">
       <div class="flex items-center justify-between">
         <h3 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
           Tenant Splits
@@ -77,40 +88,264 @@ export const TenantSection = ({
               <th class="p-3 font-medium">Tenant</th>
               <th class="p-3 font-medium w-32">Amount ($)</th>
               <th class="p-3 font-medium w-24">Ext (Days)</th>
+              ${isEdit
+                ? html`
+                    <th class="p-3 font-medium w-32">Status</th>
+                    <th class="p-3 font-medium w-40 text-center">Actions</th>
+                  `
+                : !isLocked
+                  ? html`<th class="p-3 font-medium w-16"></th>`
+                  : ""}
             </tr>
           </thead>
           <tbody id="tenant-rows">
             ${splits.map(
-              (split) => html`
-                <tr class="border-t border-muted/20">
+              (split, index) => html`
+                <tr class="border-t border-muted/20" id="tenant-row-${index}">
                   <td class="p-3">
                     <div class="font-medium">
                       ${split.userDisplayName || split.userEmail?.split("@")[0]}
                     </div>
                     <div class="text-xs text-muted-foreground">${split.userEmail}</div>
-                    <input type="hidden" name="tenantIds[]" value="${split.userId}" />
+                    ${!isEdit
+                      ? html`<input type="hidden" name="tenantIds[]" value="${split.userId}" />`
+                      : ""}
                   </td>
+
                   <td class="p-3">
-                    <input
-                      type="number"
-                      step="0.01"
-                      name="tenantAmounts[]"
-                      value="${(split.amountCents / 100).toFixed(2)}"
-                      required
-                      ${isLocked || isEdit
-                        ? "readonly class='bg-transparent border-none font-semibold text-right'"
-                        : "class='w-full rounded border px-2 py-1'"} />
+                    ${!isEdit
+                      ? html`
+                          <input
+                            type="number"
+                            step="0.01"
+                            name="tenantAmounts[]"
+                            value="${(split.amountCents / 100).toFixed(2)}"
+                            required
+                            ${isLocked
+                              ? "readonly class='bg-transparent border-none font-semibold text-right'"
+                              : "class='w-full rounded border px-2 py-1'"} />
+                        `
+                      : html`
+                          <div class="font-semibold text-right">
+                            $${(split.amountCents / 100).toFixed(2)}
+                          </div>
+                        `}
                   </td>
+
                   <td class="p-3">
-                    <input
-                      type="number"
-                      name="tenantExtensions[]"
-                      value="${split.extensionDays}"
-                      min="0"
-                      ${isLocked
-                        ? "readonly class='bg-transparent border-none text-right'"
-                        : "class='w-full rounded border px-2 py-1'"} />
+                    ${!isEdit
+                      ? html`
+                          <input
+                            type="number"
+                            name="tenantExtensions[]"
+                            value="${split.extensionDays}"
+                            min="0"
+                            ${isLocked
+                              ? "readonly class='bg-transparent border-none text-right'"
+                              : "class='w-full rounded border px-2 py-1'"} />
+                        `
+                      : html`
+                          <div class="space-y-1">
+                            ${split.dueDateExtensionDays && split.dueDateExtensionDays > 0
+                              ? html`
+                                  <div class="text-right font-semibold text-green-600">
+                                    +${split.dueDateExtensionDays}d
+                                  </div>
+                                `
+                              : html`<div class="text-right text-muted-foreground">—</div>`}
+                            ${split.extensionStatus === "pending"
+                              ? html`
+                                  <span
+                                    class="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs rounded-full bg-yellow-500/10 text-yellow-600">
+                                    <i data-lucide="clock" class="w-2.5 h-2.5"></i>
+                                    Requested
+                                  </span>
+                                `
+                              : split.extensionStatus === "approved"
+                                ? html`
+                                    <span
+                                      class="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs rounded-full bg-green-500/10 text-green-600">
+                                      <i data-lucide="check" class="w-2.5 h-2.5"></i>
+                                      Approved
+                                    </span>
+                                  `
+                                : split.extensionStatus === "rejected"
+                                  ? html`
+                                      <span
+                                        class="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs rounded-full bg-red-500/10 text-red-600">
+                                        <i data-lucide="x" class="w-2.5 h-2.5"></i>
+                                        Rejected
+                                      </span>
+                                    `
+                                  : ""}
+                          </div>
+                        `}
                   </td>
+
+                  ${isEdit
+                    ? html`
+                        <td class="p-3">
+                          <div class="flex items-center gap-2">
+                            ${split.status === "paid"
+                              ? html`
+                                  <span
+                                    class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-green-500/10 text-green-600">
+                                    <i data-lucide="check-circle" class="w-3 h-3"></i>
+                                    Paid
+                                  </span>
+                                `
+                              : split.tenantMarkedPaidAt
+                                ? html`
+                                    <span
+                                      class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-yellow-500/10 text-yellow-600">
+                                      <i data-lucide="clock" class="w-3 h-3"></i>
+                                      Awaiting Review
+                                    </span>
+                                  `
+                                : html`
+                                    <span
+                                      class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-gray-500/10 text-gray-600">
+                                      <i data-lucide="circle" class="w-3 h-3"></i>
+                                      Pending
+                                    </span>
+                                  `}
+                          </div>
+                          ${split.paymentReference
+                            ? html`
+                                <div class="text-xs text-muted-foreground mt-1">
+                                  Ref: ${split.paymentReference}
+                                </div>
+                              `
+                            : ""}
+                        </td>
+
+                        <td class="p-3">
+                          ${split.tenantMarkedPaidAt && split.status !== "paid"
+                            ? html`
+                                <div class="flex items-center justify-center gap-2">
+                                  <button
+                                    type="button"
+                                    class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-md bg-green-600 text-white hover:bg-green-700 transition-colors"
+                                    hx-post="/admin/invoices/${invoiceId}/payment/${split.id}/approve"
+                                    hx-swap="none"
+                                    hx-indicator="#loading-indicator">
+                                    <i data-lucide="check" class="w-3 h-3"></i>
+                                    Approve
+                                  </button>
+                                  <button
+                                    type="button"
+                                    class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-md bg-red-600 text-white hover:bg-red-700 transition-colors"
+                                    hx-post="/admin/invoices/${invoiceId}/payment/${split.id}/reject"
+                                    hx-prompt="Reason for rejection (optional):"
+                                    hx-swap="none"
+                                    hx-indicator="#loading-indicator">
+                                    <i data-lucide="x" class="w-3 h-3"></i>
+                                    Reject
+                                  </button>
+                                </div>
+                              `
+                            : split.extensionStatus === "pending"
+                              ? html`
+                                  <div class="flex flex-col gap-2">
+                                    <div class="flex items-center justify-center gap-2">
+                                      <button
+                                        type="button"
+                                        class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                                        hx-post="/admin/invoices/${invoiceId}/payment/${split.id}/approve-extension"
+                                        hx-swap="none"
+                                        hx-indicator="#loading-indicator">
+                                        <i data-lucide="calendar-check" class="w-3 h-3"></i>
+                                        Approve Ext.
+                                      </button>
+                                      <button
+                                        type="button"
+                                        class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-md bg-gray-600 text-white hover:bg-gray-700 transition-colors"
+                                        hx-post="/admin/invoices/${invoiceId}/payment/${split.id}/reject-extension"
+                                        hx-prompt="Reason for rejection (optional):"
+                                        hx-swap="none"
+                                        hx-indicator="#loading-indicator">
+                                        <i data-lucide="calendar-x" class="w-3 h-3"></i>
+                                        Reject Ext.
+                                      </button>
+                                    </div>
+                                    ${split.extensionReason
+                                      ? html`
+                                          <div
+                                            class="text-xs text-muted-foreground text-center italic">
+                                            "${split.extensionReason}"
+                                          </div>
+                                        `
+                                      : ""}
+                                  </div>
+                                `
+                              : split.status === "paid"
+                                ? html`
+                                    <div class="flex flex-col gap-2 items-center">
+                                      <div class="text-center text-xs text-muted-foreground">
+                                        Approved
+                                      </div>
+                                      ${split.dueDateExtensionDays && split.dueDateExtensionDays > 0
+                                        ? html`
+                                            <button
+                                              type="button"
+                                              class="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md text-red-600 hover:bg-red-50 transition-colors"
+                                              hx-post="/admin/invoices/${invoiceId}/payment/${split.id}/revoke-extension"
+                                              hx-confirm="Revoke this extension? This cannot be undone."
+                                              hx-swap="none"
+                                              hx-indicator="#loading-indicator">
+                                              <i data-lucide="rotate-ccw" class="w-3 h-3"></i>
+                                              Revoke Ext.
+                                            </button>
+                                          `
+                                        : ""}
+                                    </div>
+                                  `
+                                : html`
+                                    <div class="flex flex-col gap-2 items-center">
+                                      <div class="text-center text-xs text-muted-foreground">
+                                        Waiting for tenant
+                                      </div>
+                                      <button
+                                        type="button"
+                                        class="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md text-blue-600 hover:bg-blue-50 transition-colors"
+                                        hx-post="/admin/invoices/${invoiceId}/payment/${split.id}/grant-extension"
+                                        hx-prompt="Grant extension (number of days):"
+                                        hx-swap="none"
+                                        hx-indicator="#loading-indicator">
+                                        <i data-lucide="calendar-plus" class="w-3 h-3"></i>
+                                        Grant Ext.
+                                      </button>
+                                      ${split.dueDateExtensionDays && split.dueDateExtensionDays > 0
+                                        ? html`
+                                            <button
+                                              type="button"
+                                              class="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md text-red-600 hover:bg-red-50 transition-colors"
+                                              hx-post="/admin/invoices/${invoiceId}/payment/${split.id}/revoke-extension"
+                                              hx-confirm="Revoke this extension? This cannot be undone."
+                                              hx-swap="none"
+                                              hx-indicator="#loading-indicator">
+                                              <i data-lucide="rotate-ccw" class="w-3 h-3"></i>
+                                              Revoke Ext.
+                                            </button>
+                                          `
+                                        : ""}
+                                    </div>
+                                  `}
+                        </td>
+                      `
+                    : !isLocked
+                      ? html`
+                          <td class="p-3 text-center">
+                            <button
+                              type="button"
+                              class="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-destructive/10 text-destructive transition-colors"
+                              onclick="this.closest('tr').remove(); recalculateSplits();"
+                              title="Remove tenant">
+                              <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                          </td>
+                        `
+                      : ""}
                 </tr>
               `,
             )}
@@ -120,13 +355,14 @@ export const TenantSection = ({
         ${splits.length === 0
           ? html`
               <div class="p-6 text-center text-muted-foreground text-sm">
+                <i data-lucide="users" class="w-8 h-8 mx-auto mb-2 opacity-50"></i>
                 <p>Select a property above to load active tenants.</p>
               </div>
             `
           : ""}
       </div>
 
-      ${!isLocked && splits.length > 0
+      ${!isLocked && splits.length > 0 && !isEdit
         ? html`
             <p class="text-xs text-right text-muted-foreground">
               <i data-lucide="info" class="w-3 h-3 inline mr-1"></i>
@@ -135,9 +371,45 @@ export const TenantSection = ({
           `
         : ""}
     </div>
+
+    ${!isEdit
+      ? html`
+          <script>
+            // Helper function to recalculate splits when a tenant is removed
+            function recalculateSplits() {
+              const rows = document.querySelectorAll("#tenant-rows tr");
+              const amountInput = document.querySelector('input[name="amountDollars"]');
+
+              if (!amountInput || rows.length === 0) return;
+
+              const totalAmount = parseFloat(amountInput.value) || 0;
+              const totalCents = Math.round(totalAmount * 100);
+              const count = rows.length;
+
+              if (count === 0) return;
+
+              const baseShare = Math.floor(totalCents / count);
+              let remainder = totalCents % count;
+
+              rows.forEach((row, index) => {
+                const amountField = row.querySelector('input[name="tenantAmounts[]"]');
+                if (amountField) {
+                  const share = baseShare + (remainder > 0 ? 1 : 0);
+                  remainder--;
+                  amountField.value = (share / 100).toFixed(2);
+                }
+              });
+            }
+
+            // Initialize Lucide icons for dynamically loaded content
+            if (typeof lucide !== "undefined") {
+              lucide.createIcons();
+            }
+          </script>
+        `
+      : ""}
   `;
 };
-
 // Updated Invoice Form
 export const InvoiceForm = ({
   invoice,

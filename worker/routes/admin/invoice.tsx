@@ -6,6 +6,7 @@ import { z } from "zod";
 
 // Domain
 import { invoice } from "@server/schema/invoice.schema";
+import { room } from "@server/schema/room.schema";
 import { invoicePayment } from "@server/schema/invoicePayment.schema";
 import { users } from "@server/schema/auth.schema";
 import { property } from "@server/schema/property.schema";
@@ -133,48 +134,70 @@ invoiceRoute.post("/", zValidator("form", formSchema), async (c) => {
   const userId = c.var.auth.user!.id;
   const rawBody = await c.req.parseBody();
 
-  // A. Ownership Check
-  const [prop] = await db
-    .select()
-    .from(property)
-    .where(and(eq(property.id, data.propertyId), eq(property.landlordId, userId)));
-  if (!prop) return c.text("Unauthorized", 403);
+  try {
+    // A. Ownership Check
+    const [prop] = await db
+      .select()
+      .from(property)
+      .where(and(eq(property.id, data.propertyId), eq(property.landlordId, userId)));
 
-  // B. Parse & Validate Splits
-  const totalCents = Math.round(data.amountDollars * 100);
-  const splits = InvoiceService.parseSplits(
-    rawBody["tenantIds[]"],
-    rawBody["tenantAmounts[]"],
-    rawBody["tenantExtensions[]"],
-  );
+    if (!prop) return c.text("Unauthorized", 403);
 
-  // 1. Create the IMMEDIATE Invoice (As before)
-  const [newInvoice] = await db
-    .insert(invoice)
-    .values({
-      propertyId: data.propertyId,
-      type: data.type,
-      description: data.description,
-      dueDate: data.dueDate,
-      totalAmount: totalCents,
-      status: "open",
-    })
-    .returning();
-
-  // Insert Splits for immediate invoice
-  if (splits.length > 0) {
-    await db.insert(invoicePayment).values(
-      splits.map((s) => ({
-        invoiceId: newInvoice.id,
-        userId: s.userId,
-        amountOwed: s.amountCents,
-        status: "pending",
-        dueDateExtensionDays: s.extensionDays,
-      })),
+    // B. Parse & Validate Splits
+    const totalCents = Math.round(data.amountDollars * 100);
+    const splits = InvoiceService.parseSplits(
+      rawBody["tenantIds[]"],
+      rawBody["tenantAmounts[]"],
+      rawBody["tenantExtensions[]"],
     );
+
+    // C. Validate accounting integrity
+    try {
+      InvoiceService.validateIntegrity(totalCents, splits);
+    } catch (validationError: any) {
+      flashToast(c, validationError.message, { type: "error" });
+      return htmxRedirect(c, "/admin/invoices/new");
+    }
+
+    // D. Create invoice with payments using service
+    const result = await InvoiceService.createInvoicesWithPayments(db, [
+      {
+        invoiceData: {
+          propertyId: data.propertyId,
+          type: data.type,
+          description: data.description,
+          dueDate: data.dueDate,
+          totalAmount: totalCents,
+          status: "open",
+          // Optional: Add idempotency key if you want to prevent duplicates
+          // idempotencyKey: `manual-${userId}-${Date.now()}`,
+        },
+        payments: splits.map((s) => ({
+          userId: s.userId,
+          amountOwed: s.amountCents,
+          status: "pending",
+          dueDateExtensionDays: s.extensionDays,
+        })),
+      },
+    ]);
+
+    // E. Handle result
+    if (!result.success) {
+      if (result.message === "IDEMPOTENCY_VIOLATION") {
+        flashToast(c, "This invoice already exists", { type: "info" });
+      } else {
+        flashToast(c, "Failed to create invoice", { type: "error" });
+      }
+      return htmxRedirect(c, "/admin/invoices");
+    }
+
+    flashToast(c, "Invoice Created", { type: "success" });
+    return htmxRedirect(c, "/admin/invoices");
+  } catch (error: any) {
+    console.error("Failed to create invoice:", error);
+    flashToast(c, "Database Error: " + error.message, { type: "error" });
+    return htmxRedirect(c, "/admin/invoices");
   }
-  flashToast(c, "Invoice Created", { type: "success" });
-  return htmxRedirect(c, "/admin/invoices");
 });
 
 // 4. GET /:id/edit
@@ -311,69 +334,36 @@ invoiceRoute.post("/:id/update", zValidator("form", formSchema), async (c) => {
   return htmxRedirect(c, `/admin/invoices/${id}/edit?page=${data.page}`);
 });
 
-// 6. Payment Action (Approve)
-invoiceRoute.post("/:id/payment/:paymentId/approve", async (c) => {
-  const db = c.var.db;
-  const invoiceId = Number(c.req.param("id"));
-  const paymentId = Number(c.req.param("paymentId"));
-
-  // Verify
-  const [pay] = await db.select().from(invoicePayment).where(eq(invoicePayment.id, paymentId));
-  if (!pay || pay.invoiceId !== invoiceId) return c.text("Invalid", 400);
-
-  // Update
-  await db
-    .update(invoicePayment)
-    .set({
-      status: "paid",
-      amountPaid: pay.amountOwed, // Assume full payment for now
-      paidAt: new Date(),
-    })
-    .where(eq(invoicePayment.id, paymentId));
-
-  // Reconcile
-  await InvoiceService.reconcileStatus(db, invoiceId);
-
-  return htmxRedirect(c, `/admin/invoices/${invoiceId}/edit`);
-});
-
-// 7. Payment Action (Reject)
-invoiceRoute.post("/:id/payment/:paymentId/reject", async (c) => {
-  const db = c.var.db;
-  const invoiceId = Number(c.req.param("id"));
-  const paymentId = Number(c.req.param("paymentId"));
-  const reason = c.req.header("HX-Prompt");
-
-  await db
-    .update(invoicePayment)
-    .set({
-      status: "pending",
-      tenantMarkedPaidAt: null,
-      adminNote: reason,
-    })
-    .where(eq(invoicePayment.id, paymentId));
-
-  await InvoiceService.reconcileStatus(db, invoiceId);
-  return htmxRedirect(c, `/admin/invoices/${invoiceId}/edit`);
-});
-
 // 8. Dynamic Tenant Loader (HTMX)
 invoiceRoute.get("/fragments/tenant-section", async (c) => {
   const db = c.var.db;
   const propertyId = Number(c.req.query("propertyId"));
   const amountStr = c.req.query("amount"); // passed from UI to auto-split
 
-  if (!propertyId) return c.html("");
+  if (!propertyId) {
+    return c.html(
+      TenantSection({
+        splits: [],
+        isLocked: false,
+        isEdit: false,
+      }),
+    );
+  }
 
-  // Fetch active tenants
+  // Fetch active tenants for the selected property
   const tenants = await db
-    .select({ id: users.id, displayName: users.displayName, email: users.email })
+    .select({
+      id: users.id,
+      displayName: users.displayName,
+      email: users.email,
+    })
     .from(tenancy)
     .innerJoin(users, eq(tenancy.userId, users.id))
     .where(
       and(
         eq(tenancy.propertyId, propertyId),
-        inArray(tenancy.status, ["active", "move_in_ready", "notice_period"]),
+        // Only include active tenancies
+        sql`${tenancy.status} IN ('active', 'move_in_ready', 'bond_pending', 'pending_agreement')`,
       ),
     );
 
@@ -395,7 +385,81 @@ invoiceRoute.get("/fragments/tenant-section", async (c) => {
     };
   });
 
-  return c.html(TenantSection({ splits, isLocked: false })); // New component needed
+  return c.html(
+    TenantSection({
+      splits,
+      isLocked: false,
+      isEdit: false,
+    }),
+  );
+});
+
+// 6. Payment Action (Approve)
+invoiceRoute.post("/:id/payment/:paymentId/approve", async (c) => {
+  const db = c.var.db;
+  const invoiceId = Number(c.req.param("id"));
+  const paymentId = Number(c.req.param("paymentId"));
+
+  try {
+    // Verify payment exists and belongs to this invoice
+    const [pay] = await db.select().from(invoicePayment).where(eq(invoicePayment.id, paymentId));
+
+    if (!pay || pay.invoiceId !== invoiceId) {
+      flashToast(c, "Invalid payment", { type: "error" });
+      return c.text("Invalid", 400);
+    }
+
+    // Update payment to approved/paid status
+    await db
+      .update(invoicePayment)
+      .set({
+        status: "paid",
+        amountPaid: pay.amountOwed, // Assume full payment for now
+        paidAt: new Date(),
+      })
+      .where(eq(invoicePayment.id, paymentId));
+
+    // Reconcile invoice status
+    await InvoiceService.reconcileStatus(db, invoiceId);
+
+    flashToast(c, "Payment approved", { type: "success" });
+    return htmxRedirect(c, `/admin/invoices/${invoiceId}/edit`);
+  } catch (error: any) {
+    console.error("Failed to approve payment:", error);
+    flashToast(c, "Failed to approve payment", { type: "error" });
+    return htmxRedirect(c, `/admin/invoices/${invoiceId}/edit`);
+  }
+});
+
+// 7. Payment Action (Reject)
+invoiceRoute.post("/:id/payment/:paymentId/reject", async (c) => {
+  const db = c.var.db;
+  const invoiceId = Number(c.req.param("id"));
+  const paymentId = Number(c.req.param("paymentId"));
+  const reason = c.req.header("HX-Prompt");
+
+  try {
+    // Update payment to rejected status
+    await db
+      .update(invoicePayment)
+      .set({
+        status: "pending",
+        tenantMarkedPaidAt: null,
+        paymentReference: null,
+        adminNote: reason || "Payment rejected by admin",
+      })
+      .where(eq(invoicePayment.id, paymentId));
+
+    // Reconcile invoice status
+    await InvoiceService.reconcileStatus(db, invoiceId);
+
+    flashToast(c, "Payment rejected", { type: "info" });
+    return htmxRedirect(c, `/admin/invoices/${invoiceId}/edit`);
+  } catch (error: any) {
+    console.error("Failed to reject payment:", error);
+    flashToast(c, "Failed to reject payment", { type: "error" });
+    return htmxRedirect(c, `/admin/invoices/${invoiceId}/edit`);
+  }
 });
 // POST /admin/invoices/tenancy/:id/generate
 invoiceRoute.post("/tenancy/:id/generate", async (c) => {
@@ -407,108 +471,118 @@ invoiceRoute.post("/tenancy/:id/generate", async (c) => {
 
   const db = c.get("db");
 
-  // 1. Fetch Tenancy & Property
+  // 1. Fetch Tenancy & Property (with optional Room)
   const tenRecord = await db
     .select()
     .from(tenancy)
     .where(eq(tenancy.id, tenancyId))
     .innerJoin(property, eq(tenancy.propertyId, property.id))
+    .leftJoin(room, eq(tenancy.roomId, room.id))
     .get()
-    .then((res) => (res ? { ...res.tenancy, property: res.property } : null));
+    .then((res) => {
+      if (!res) return null;
+      return {
+        ...res.tenancy,
+        property: res.property,
+        room: res.room || null,
+      };
+    });
 
   if (!tenRecord || !tenRecord.property) {
     htmxToast(c, "Tenancy not found", { type: "error" });
     return htmxRedirect(c, "/admin/tenancies");
   }
 
-  // 2. Helper to Safely Create Invoice + Payment
-  // This replaces the transaction. If payment creation fails, it deletes the invoice.
-  const createInvoiceWithPayment = async (invoiceData: any, amount: number) => {
-    let newInvoiceId: number | null = null;
-    try {
-      // A. Create Invoice
-      const [newInv] = await db.insert(invoice).values(invoiceData).returning();
-      newInvoiceId = newInv.id;
-
-      // B. Create Payment Link
-      await db.insert(invoicePayment).values({
-        invoiceId: newInv.id,
-        userId: tenRecord.userId,
-        amountOwed: amount,
-        status: "pending",
-      });
-
-      return true; // Success
-    } catch (err) {
-      console.error("Failed to create invoice/payment pair:", err);
-      // MANUAL ROLLBACK: If we created an invoice but failed afterwards, delete the invoice
-      if (newInvoiceId) {
-        await db.delete(invoice).where(eq(invoice.id, newInvoiceId));
-      }
-      throw err; // Re-throw to show error toast
-    }
-  };
+  const messages: string[] = [];
+  const tenancyUpdates: any = {};
+  let shouldUpdateTenancyStatus = false;
 
   try {
-    const messages = [];
-
     // --- Bond Logic ---
     if ((strategy === "all" || strategy === "bond_only") && tenRecord.bondAmount) {
-      await createInvoiceWithPayment(
-        {
-          propertyId: tenRecord.propertyId,
-          type: "other",
-          description: "Bond Payment",
-          totalAmount: tenRecord.bondAmount,
-          dueDate: tenRecord.startDate,
-          status: "open",
-          idempotencyKey: `bond-${tenRecord.id}`,
-        },
-        tenRecord.bondAmount,
-      );
-      messages.push("Bond");
+      const result = await InvoiceService.createBondInvoice(db, {
+        propertyId: tenRecord.propertyId,
+        tenancyId: tenRecord.id,
+        userId: tenRecord.userId,
+        bondAmount: tenRecord.bondAmount,
+        dueDate: tenRecord.startDate,
+      });
+
+      if (result.success) {
+        messages.push("Bond");
+        shouldUpdateTenancyStatus = true;
+      } else if (result.message === "IDEMPOTENCY_VIOLATION") {
+        flashToast(c, "Bond invoice already exists", { type: "info" });
+        return htmxRedirect(c, `/admin/tenancies`);
+      }
     }
 
     // --- Rent Logic ---
     if (strategy === "all" || strategy === "rent_only") {
-      const rentAction = await InvoiceService.calculateNextRent(tenRecord.property, tenRecord);
+      // Determine the rent amount to use:
+      // - If tenant is assigned to a room AND room has baseRentAmount, use that
+      // - Otherwise, use property rent amount
+      // Note: Room rent still follows the property's rent frequency
+      const effectiveRentAmount = tenRecord.room?.baseRentAmount
+        ? tenRecord.room.baseRentAmount
+        : tenRecord.property.rentAmount;
+
+      // Create a modified property object with the effective rent for calculation
+      const propertyWithEffectiveRent = {
+        ...tenRecord.property,
+        rentAmount: effectiveRentAmount,
+      };
+
+      const rentAction = await InvoiceService.calculateNextRent(
+        propertyWithEffectiveRent,
+        tenRecord,
+      );
+
       console.log("Rent Action:", rentAction);
+
       if (rentAction) {
-        await createInvoiceWithPayment(
-          {
-            propertyId: tenRecord.propertyId,
-            type: "rent",
-            description: `Rent (${rentAction.start.toLocaleDateString()} - ${rentAction.end.toLocaleDateString()})`,
-            totalAmount: rentAction.amountCents,
-            dueDate: rentAction.start,
-            status: "open",
-            idempotencyKey: rentAction.idempotencyKey,
-          },
-          rentAction.amountCents,
-        );
+        const result = await InvoiceService.createRentInvoice(db, {
+          propertyId: tenRecord.propertyId,
+          tenancyId: tenRecord.id,
+          userId: tenRecord.userId,
+          rentAction,
+          roomName: tenRecord.room?.name,
+        });
 
-        // Update Tenancy (Safe to do after invoice creation)
-        await db
-          .update(tenancy)
-          .set({ billedThroughDate: rentAction.end, updatedAt: new Date() })
-          .where(eq(tenancy.id, tenancyId));
+        if (result.success) {
+          messages.push("Rent");
 
-        messages.push("Rent");
+          // Prepare tenancy update for billed through date
+          tenancyUpdates.billedThroughDate = rentAction.end;
+          tenancyUpdates.updatedAt = new Date();
+        } else if (result.message === "IDEMPOTENCY_VIOLATION") {
+          flashToast(c, "Rent invoice already exists", { type: "info" });
+          return htmxRedirect(c, `/admin/tenancies`);
+        }
       }
     }
 
+    // --- Update Tenancy Status and Billing ---
+    if (shouldUpdateTenancyStatus || Object.keys(tenancyUpdates).length > 0) {
+      const updateData: any = { ...tenancyUpdates };
+
+      // Update status to bond_pending if bond was generated
+      if (shouldUpdateTenancyStatus) {
+        updateData.status = "bond_pending";
+      }
+
+      await db.update(tenancy).set(updateData).where(eq(tenancy.id, tenancyId));
+    }
+
+    // --- Success Messages ---
     if (messages.length > 0) {
       flashToast(c, `Generated: ${messages.join(", ")}`, { type: "success" });
     } else {
       flashToast(c, "No invoices generated (already up to date?)", { type: "info" });
     }
-  } catch (e: any) {
-    // Handle idempotency (Unique constraint violation)
-    if (e.message?.includes("UNIQUE constraint") || e.message?.includes("idempotency")) {
-      flashToast(c, "Invoices already exist", { type: "info" });
-    } else {
-      flashToast(c, "Database Error", { type: "error" });
-    }
+  } catch (error: any) {
+    console.error("Invoice generation error:", error);
+    flashToast(c, "Failed to generate invoices: " + error.message, { type: "error" });
   }
 
   return htmxRedirect(c, `/admin/tenancies`);
@@ -542,4 +616,254 @@ invoiceRoute.delete("/:id", async (c) => {
 
   flashToast(c, "Invoice Deleted", { type: "success" });
   return htmxRedirect(c, "/admin/invoices");
+});
+// 9. POST /admin/invoices/:id/payment/:paymentId/approve-extension
+// Approve a tenant's extension request
+invoiceRoute.post("/:id/payment/:paymentId/approve-extension", async (c) => {
+  const db = c.var.db;
+  const invoiceId = Number(c.req.param("id"));
+  const paymentId = Number(c.req.param("paymentId"));
+  const userId = c.var.auth.user!.id;
+
+  try {
+    // Verify payment exists and belongs to an invoice owned by this landlord
+    const [record] = await db
+      .select({
+        payment: invoicePayment,
+        invoice: invoice,
+        property: property,
+      })
+      .from(invoicePayment)
+      .innerJoin(invoice, eq(invoicePayment.invoiceId, invoice.id))
+      .innerJoin(property, eq(invoice.propertyId, property.id))
+      .where(
+        and(
+          eq(invoicePayment.id, paymentId),
+          eq(invoice.id, invoiceId),
+          eq(property.landlordId, userId),
+        ),
+      );
+
+    if (!record) {
+      flashToast(c, "Payment not found or unauthorized", { type: "error" });
+      return c.text("Unauthorized", 403);
+    }
+
+    // Check if there's a pending extension request
+    if (record.payment.extensionStatus !== "pending") {
+      flashToast(c, "No pending extension request", { type: "info" });
+      return htmxRedirect(c, `/admin/invoices/${invoiceId}/edit`);
+    }
+
+    // Calculate extension days from the requested date
+    const requestedDate = new Date(record.payment.extensionRequestedDate!);
+    const originalDueDate = new Date(record.invoice.dueDate);
+    const extensionDays = Math.ceil(
+      (requestedDate.getTime() - originalDueDate.getTime()) / (1000 * 60 * 60 * 24),
+    );
+
+    // Update payment with approved extension
+    await db
+      .update(invoicePayment)
+      .set({
+        extensionStatus: "approved",
+        dueDateExtensionDays: Math.max(0, extensionDays), // Ensure non-negative
+      })
+      .where(eq(invoicePayment.id, paymentId));
+
+    // Reconcile invoice status (may change from overdue back to open)
+    await InvoiceService.reconcileStatus(db, invoiceId);
+
+    flashToast(c, "Extension approved", { type: "success" });
+    return htmxRedirect(c, `/admin/invoices/${invoiceId}/edit`);
+  } catch (error: any) {
+    console.error("Failed to approve extension:", error);
+    flashToast(c, "Failed to approve extension", { type: "error" });
+    return htmxRedirect(c, `/admin/invoices/${invoiceId}/edit`);
+  }
+});
+
+// 10. POST /admin/invoices/:id/payment/:paymentId/reject-extension
+// Reject a tenant's extension request
+invoiceRoute.post("/:id/payment/:paymentId/reject-extension", async (c) => {
+  const db = c.var.db;
+  const invoiceId = Number(c.req.param("id"));
+  const paymentId = Number(c.req.param("paymentId"));
+  const userId = c.var.auth.user!.id;
+  const reason = c.req.header("HX-Prompt"); // Optional rejection reason
+
+  try {
+    // Verify payment exists and belongs to an invoice owned by this landlord
+    const [record] = await db
+      .select({
+        payment: invoicePayment,
+        invoice: invoice,
+        property: property,
+      })
+      .from(invoicePayment)
+      .innerJoin(invoice, eq(invoicePayment.invoiceId, invoice.id))
+      .innerJoin(property, eq(invoice.propertyId, property.id))
+      .where(
+        and(
+          eq(invoicePayment.id, paymentId),
+          eq(invoice.id, invoiceId),
+          eq(property.landlordId, userId),
+        ),
+      );
+
+    if (!record) {
+      flashToast(c, "Payment not found or unauthorized", { type: "error" });
+      return c.text("Unauthorized", 403);
+    }
+
+    // Check if there's a pending extension request
+    if (record.payment.extensionStatus !== "pending") {
+      flashToast(c, "No pending extension request", { type: "info" });
+      return htmxRedirect(c, `/admin/invoices/${invoiceId}/edit`);
+    }
+
+    // Update payment to reject extension
+    await db
+      .update(invoicePayment)
+      .set({
+        extensionStatus: "rejected",
+        adminNote: reason || "Extension request rejected",
+      })
+      .where(eq(invoicePayment.id, paymentId));
+
+    // Reconcile invoice status
+    await InvoiceService.reconcileStatus(db, invoiceId);
+
+    flashToast(c, "Extension rejected", { type: "info" });
+    return htmxRedirect(c, `/admin/invoices/${invoiceId}/edit`);
+  } catch (error: any) {
+    console.error("Failed to reject extension:", error);
+    flashToast(c, "Failed to reject extension", { type: "error" });
+    return htmxRedirect(c, `/admin/invoices/${invoiceId}/edit`);
+  }
+});
+
+// 11. POST /admin/invoices/:id/payment/:paymentId/grant-extension
+// Landlord can manually grant an extension (without tenant request)
+invoiceRoute.post("/:id/payment/:paymentId/grant-extension", async (c) => {
+  const db = c.var.db;
+  const invoiceId = Number(c.req.param("id"));
+  const paymentId = Number(c.req.param("paymentId"));
+  const userId = c.var.auth.user!.id;
+
+  // Get extension days from prompt
+  const extensionDaysStr = c.req.header("HX-Prompt");
+  const extensionDays = parseInt(extensionDaysStr || "0");
+
+  if (!extensionDays || extensionDays < 1) {
+    flashToast(c, "Please enter a valid number of days", { type: "error" });
+    return htmxRedirect(c, `/admin/invoices/${invoiceId}/edit`);
+  }
+
+  try {
+    // Verify payment exists and belongs to an invoice owned by this landlord
+    const [record] = await db
+      .select({
+        payment: invoicePayment,
+        invoice: invoice,
+        property: property,
+      })
+      .from(invoicePayment)
+      .innerJoin(invoice, eq(invoicePayment.invoiceId, invoice.id))
+      .innerJoin(property, eq(invoice.propertyId, property.id))
+      .where(
+        and(
+          eq(invoicePayment.id, paymentId),
+          eq(invoice.id, invoiceId),
+          eq(property.landlordId, userId),
+        ),
+      );
+
+    if (!record) {
+      flashToast(c, "Payment not found or unauthorized", { type: "error" });
+      return c.text("Unauthorized", 403);
+    }
+
+    // Update payment with manual extension
+    await db
+      .update(invoicePayment)
+      .set({
+        dueDateExtensionDays: extensionDays,
+        extensionStatus: "approved", // Mark as approved even though tenant didn't request
+        adminNote: `Manual extension granted: ${extensionDays} days`,
+      })
+      .where(eq(invoicePayment.id, paymentId));
+
+    // Reconcile invoice status (may change from overdue back to open)
+    await InvoiceService.reconcileStatus(db, invoiceId);
+
+    flashToast(c, `Extension of ${extensionDays} days granted`, { type: "success" });
+    return htmxRedirect(c, `/admin/invoices/${invoiceId}/edit`);
+  } catch (error: any) {
+    console.error("Failed to grant extension:", error);
+    flashToast(c, "Failed to grant extension", { type: "error" });
+    return htmxRedirect(c, `/admin/invoices/${invoiceId}/edit`);
+  }
+});
+
+// 12. POST /admin/invoices/:id/payment/:paymentId/revoke-extension
+// Revoke a previously granted extension
+invoiceRoute.post("/:id/payment/:paymentId/revoke-extension", async (c) => {
+  const db = c.var.db;
+  const invoiceId = Number(c.req.param("id"));
+  const paymentId = Number(c.req.param("paymentId"));
+  const userId = c.var.auth.user!.id;
+
+  try {
+    // Verify payment exists and belongs to an invoice owned by this landlord
+    const [record] = await db
+      .select({
+        payment: invoicePayment,
+        invoice: invoice,
+        property: property,
+      })
+      .from(invoicePayment)
+      .innerJoin(invoice, eq(invoicePayment.invoiceId, invoice.id))
+      .innerJoin(property, eq(invoice.propertyId, property.id))
+      .where(
+        and(
+          eq(invoicePayment.id, paymentId),
+          eq(invoice.id, invoiceId),
+          eq(property.landlordId, userId),
+        ),
+      );
+
+    if (!record) {
+      flashToast(c, "Payment not found or unauthorized", { type: "error" });
+      return c.text("Unauthorized", 403);
+    }
+
+    // Check if there's an extension to revoke
+    if (record.payment.dueDateExtensionDays === 0) {
+      flashToast(c, "No extension to revoke", { type: "info" });
+      return htmxRedirect(c, `/admin/invoices/${invoiceId}/edit`);
+    }
+
+    // Reset extension
+    await db
+      .update(invoicePayment)
+      .set({
+        dueDateExtensionDays: 0,
+        extensionStatus: "none",
+        extensionRequestedDate: null,
+        extensionReason: null,
+        adminNote: null,
+      })
+      .where(eq(invoicePayment.id, paymentId));
+
+    // Reconcile invoice status (may change to overdue if past original due date)
+    await InvoiceService.reconcileStatus(db, invoiceId);
+
+    flashToast(c, "Extension revoked", { type: "info" });
+    return htmxRedirect(c, `/admin/invoices/${invoiceId}/edit`);
+  } catch (error: any) {
+    console.error("Failed to revoke extension:", error);
+    flashToast(c, "Failed to revoke extension", { type: "error" });
+    return htmxRedirect(c, `/admin/invoices/${invoiceId}/edit`);
+  }
 });
