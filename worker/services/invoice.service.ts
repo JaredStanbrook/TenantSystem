@@ -3,23 +3,23 @@ import {
   addDays,
   addMonths,
   differenceInDays,
-  differenceInCalendarWeeks,
   startOfDay,
-  nextDay,
-  isSameDay,
-  getDay,
   format,
+  isAfter,
+  isBefore,
 } from "date-fns";
 
 import { eq, and, sql, ne } from "drizzle-orm";
 import { invoice, INVOICE_STATUSES } from "../schema/invoice.schema";
 import { invoicePayment } from "../schema/invoicePayment.schema";
+import { property } from "../schema/property.schema";
+import { room } from "../schema/room.schema";
+import { users } from "../schema/auth.schema";
 import { AppEnv } from "../types";
 import { tenancy } from "@server/schema/tenancy.schema";
 
 // --- Types ---
 type DrizzleDB = AppEnv["Variables"]["db"];
-type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6; // Sunday to Saturday
 
 export interface CreateInvoiceWithPaymentParams {
   invoiceData: {
@@ -66,7 +66,6 @@ export const InvoiceService = {
   validateIntegrity(totalAmountCents: number, splits: { amountOwed: number }[]) {
     const sumSplits = splits.reduce((acc, s) => acc + s.amountOwed, 0);
 
-    // Allow a 0 total invoice (e.g. record keeping), but splits must match
     if (sumSplits !== totalAmountCents) {
       throw new Error(
         `Accounting Mismatch: Total is ${(totalAmountCents / 100).toFixed(2)}, ` +
@@ -78,7 +77,6 @@ export const InvoiceService = {
 
   /**
    * Create invoice with associated payments in batch
-   * Returns the created invoice IDs or throws with idempotency info
    */
   async createInvoicesWithPayments(
     db: DrizzleDB,
@@ -102,22 +100,19 @@ export const InvoiceService = {
     };
 
     try {
-      // Validate all invoices first
       for (const inv of invoices) {
+        console.log(inv);
         this.validateIntegrity(inv.invoiceData.totalAmount, inv.payments);
       }
 
-      // STEP 1: Create all invoices in batch
       const invoiceValues = invoices.map((inv) => ({
         ...inv.invoiceData,
         status: inv.invoiceData.status || "open",
       }));
 
       const createdInvoices = await db.insert(invoice).values(invoiceValues).returning();
-
       createdInvoiceIds.push(...createdInvoices.map((inv) => inv.id));
 
-      // STEP 2: Create all payments linked to invoices
       const allPayments = invoices.flatMap((inv, index) =>
         inv.payments.map((payment) => ({
           invoiceId: createdInvoices[index].id,
@@ -137,11 +132,8 @@ export const InvoiceService = {
       };
     } catch (error: any) {
       console.error("Failed to create invoices/payments:", error);
-
-      // Manual rollback - cleanup any created invoices
       await cleanupInvoices();
 
-      // Check for idempotency constraint violation
       if (error.message?.includes("UNIQUE constraint") || error.message?.includes("idempotency")) {
         return {
           invoiceIds: [],
@@ -217,53 +209,38 @@ export const InvoiceService = {
   },
 
   /**
-   * RECONCILE STATUS
-   * This is the Authoritative State Machine.
-   * calling this updates the Invoice Status based on its Payments.
+   * RECONCILE STATUS - Authoritative State Machine
    */
   async reconcileStatus(db: DrizzleDB, invoiceId: number) {
-    // 1. Fetch current state of payments
     const payments = await db
       .select()
       .from(invoicePayment)
       .where(eq(invoicePayment.invoiceId, invoiceId));
 
     const [inv] = await db.select().from(invoice).where(eq(invoice.id, invoiceId));
-
     if (!inv) return;
 
-    // 2. Derive Aggregates
     const totalAmount = inv.totalAmount;
     const totalPaid = payments.reduce((acc, p) => acc + p.amountPaid, 0);
-    const activePayments = payments.filter((p) => p.status !== "void");
 
-    // 3. Determine Status
     let newStatus: (typeof INVOICE_STATUSES)[number] = "open";
 
-    // A. PAID: Fully settled
     if (totalPaid >= totalAmount && totalAmount > 0) {
       newStatus = "paid";
-    }
-    // B. PARTIAL: Some money collected
-    else if (totalPaid > 0) {
+    } else if (totalPaid > 0) {
       newStatus = "partial";
-    }
-    // C. OVERDUE: Check extensions
-    else {
+    } else {
       const now = new Date();
       const isOverdue = payments.some((p) => {
         if (p.status === "paid") return false;
-
         const extensionMs = (p.dueDateExtensionDays || 0) * 24 * 60 * 60 * 1000;
         const effectiveDueDate = new Date(inv.dueDate.getTime() + extensionMs);
-
         return now > effectiveDueDate;
       });
 
       if (isOverdue) newStatus = "overdue";
     }
 
-    // 4. Update DB if changed
     if (inv.status !== newStatus) {
       await db.update(invoice).set({ status: newStatus }).where(eq(invoice.id, invoiceId));
     }
@@ -289,20 +266,299 @@ export const InvoiceService = {
     }
   },
 
+  /**
+   * Generate rent invoices for ALL tenancies in a property up to nextBillingDate
+   * This is your "bulk generate" button action
+   */
+  async generateRentInvoicesForProperty(
+    db: DrizzleDB,
+    propertyId: number,
+  ): Promise<{
+    generated: number;
+    skipped: number;
+    errors: string[];
+  }> {
+    const results = {
+      generated: 0,
+      skipped: 0,
+      errors: [] as string[],
+    };
+
+    // Get property with nextBillingDate
+    const [prop] = await db.select().from(property).where(eq(property.id, propertyId));
+    if (!prop) {
+      results.errors.push("Property not found");
+      return results;
+    }
+
+    const nextBillingDate = startOfDay(prop.nextBillingDate);
+    const today = startOfDay(new Date());
+
+    // Get all active tenancies for this property with their rooms and users
+    const tenancies = await db
+      .select({
+        tenancy: tenancy,
+        room: room,
+        user: users,
+      })
+      .from(tenancy)
+      .leftJoin(room, eq(tenancy.roomId, room.id))
+      .leftJoin(users, eq(tenancy.userId, users.id))
+      .where(
+        and(
+          eq(tenancy.propertyId, propertyId),
+          sql`${tenancy.status} IN ('active', 'move_in_ready', 'pending_agreement', 'bond_pending')`,
+        ),
+      );
+    console.log(tenancies);
+    // For each tenancy, generate invoices up to nextBillingDate
+    for (const record of tenancies) {
+      if (!record.room || !record.user) {
+        results.errors.push(`Tenancy ${record.tenancy.id} missing room or user`);
+        continue;
+      }
+
+      const ten = record.tenancy;
+
+      try {
+        // Get all existing rent invoices for this tenancy to check what's already generated
+        const existingInvoices = await db
+          .select({
+            idempotencyKey: invoice.idempotencyKey,
+            id: invoice.id,
+          })
+          .from(invoice)
+          .where(
+            and(
+              eq(invoice.propertyId, propertyId),
+              eq(invoice.type, "rent"),
+              sql`${invoice.idempotencyKey} LIKE ${"rent-" + ten.id + "-%"}`,
+            ),
+          );
+
+        const existingKeys = new Set(existingInvoices.map((inv) => inv.idempotencyKey));
+
+        // Generate invoices until we reach nextBillingDate
+        let currentBilledThrough = startOfDay(ten.billedThroughDate);
+        let invoicesGenerated = 0;
+        while (isBefore(currentBilledThrough, nextBillingDate)) {
+          const rentAction = this.calculateNextRentPeriod(
+            prop.rentFrequency,
+            currentBilledThrough,
+            nextBillingDate,
+            record.room.baseRentAmount,
+          );
+
+          if (!rentAction) break;
+
+          const idempotencyKey = `rent-${ten.id}-${rentAction.end.toISOString().split("T")[0]}`;
+
+          // Check if this invoice already exists
+          if (existingKeys.has(idempotencyKey)) {
+            // Invoice exists, skip creation but move forward
+            currentBilledThrough = rentAction.end;
+            results.skipped++;
+            continue;
+          }
+
+          // Invoice doesn't exist (either never created or was deleted), create it
+          const result = await this.createInvoicesWithPayments(db, [
+            {
+              invoiceData: {
+                propertyId: propertyId,
+                type: "rent",
+                description: `Rent - ${record.room.name} (${format(rentAction.start, "dd/MM/yyyy")} - ${format(rentAction.end, "dd/MM/yyyy")})`,
+                totalAmount: rentAction.amountCents,
+                dueDate: rentAction.start,
+                status: "open",
+                idempotencyKey,
+              },
+              payments: [
+                {
+                  userId: record.user.id,
+                  amountOwed: rentAction.amountCents,
+                  status: "pending",
+                },
+              ],
+            },
+          ]);
+
+          if (result.success) {
+            // Update tenancy's billedThroughDate
+
+            await db
+              .update(tenancy)
+              .set({
+                //TODO : Tenant billedThroughDate should only be updated once the invoice is paid
+                updatedAt: new Date(),
+              })
+              .where(eq(tenancy.id, ten.id));
+
+            currentBilledThrough = rentAction.end;
+            invoicesGenerated++;
+
+            // Add to existing keys set to prevent duplicates in same run
+            existingKeys.add(idempotencyKey);
+          } else if (result.message === "IDEMPOTENCY_VIOLATION") {
+            // Edge case: created between our check and now
+            currentBilledThrough = rentAction.end;
+            results.skipped++;
+            existingKeys.add(idempotencyKey);
+          } else {
+            results.errors.push(`Failed to create invoice for tenancy ${ten.id}`);
+            break;
+          }
+        }
+
+        results.generated += invoicesGenerated;
+      } catch (error: any) {
+        results.errors.push(`Error processing tenancy ${ten.id}: ${error.message}`);
+      }
+    }
+
+    // Only advance nextBillingDate if we've reached or passed it
+    if (!isBefore(today, nextBillingDate)) {
+      await this.advanceNextBillingDate(db, propertyId, nextBillingDate, prop.rentFrequency);
+    }
+
+    return results;
+  },
+
+  /**
+   * Calculate the next rent period for a tenancy
+   * Returns the period from billedThroughDate up to (but not beyond) nextBillingDate
+   */
+  calculateNextRentPeriod(
+    frequency: "weekly" | "fortnightly" | "monthly",
+    billedThroughDate: Date,
+    nextBillingDate: Date,
+    roomRentAmount: number,
+  ): { start: Date; end: Date; amountCents: number } | null {
+    const periodStart = startOfDay(billedThroughDate);
+    let periodEnd: Date;
+
+    // Calculate the standard period end
+    if (frequency === "weekly") {
+      periodEnd = addDays(periodStart, 7);
+    } else if (frequency === "fortnightly") {
+      periodEnd = addDays(periodStart, 14);
+    } else {
+      periodEnd = addMonths(periodStart, 1);
+    }
+
+    // Don't exceed nextBillingDate
+    if (isAfter(periodEnd, nextBillingDate)) {
+      periodEnd = nextBillingDate;
+    }
+
+    const daysInPeriod = differenceInDays(periodEnd, periodStart);
+
+    if (daysInPeriod <= 0) return null;
+
+    // Calculate pro-rated amount based on room rent
+    let amountCents = 0;
+
+    if (frequency === "monthly") {
+      if (daysInPeriod >= 28 && daysInPeriod <= 31) {
+        amountCents = roomRentAmount;
+      } else {
+        const dailyRate = Math.floor((roomRentAmount * 12) / 365);
+        amountCents = dailyRate * daysInPeriod;
+      }
+    } else {
+      const weeklyRate = frequency === "weekly" ? roomRentAmount : roomRentAmount / 2;
+      const dailyRate = Math.floor((weeklyRate * 52) / 365);
+
+      if (daysInPeriod === 7 && frequency === "weekly") {
+        amountCents = roomRentAmount;
+      } else if (daysInPeriod === 14 && frequency === "fortnightly") {
+        amountCents = roomRentAmount;
+      } else {
+        amountCents = dailyRate * daysInPeriod;
+      }
+    }
+
+    return {
+      start: periodStart,
+      end: periodEnd,
+      amountCents,
+    };
+  },
+
+  /**
+   * Advance property's nextBillingDate by one period
+   * Only called when current date >= nextBillingDate
+   */
+  async advanceNextBillingDate(
+    db: DrizzleDB,
+    propertyId: number,
+    currentNextBillingDate: Date,
+    frequency: "weekly" | "fortnightly" | "monthly",
+  ) {
+    let newNextBillingDate: Date;
+
+    if (frequency === "weekly") {
+      newNextBillingDate = addDays(currentNextBillingDate, 7);
+    } else if (frequency === "fortnightly") {
+      newNextBillingDate = addDays(currentNextBillingDate, 14);
+    } else {
+      newNextBillingDate = addMonths(currentNextBillingDate, 1);
+    }
+
+    await db
+      .update(property)
+      .set({
+        nextBillingDate: newNextBillingDate,
+        updatedAt: new Date(),
+      })
+      .where(eq(property.id, propertyId));
+
+    console.log(
+      `Advanced nextBillingDate for property ${propertyId} to ${format(newNextBillingDate, "dd/MM/yyyy")}`,
+    );
+
+    return newNextBillingDate;
+  },
+
+  /**
+   * Legacy single-tenancy rent run (kept for backwards compatibility)
+   */
   async processRentRun(db: DrizzleDB, tenancyId: number) {
     const data = await db.query.tenancy.findFirst({
       where: eq(tenancy.id, tenancyId),
-      with: { property: true },
+      with: {
+        property: true,
+        room: true,
+        user: true,
+      },
     });
 
     if (!data) throw new Error("Tenancy not found");
-    if (!data.property) throw new Error("Property not found for tenancy");
+    if (!data.property) throw new Error("Property not found");
+    if (!data.room) throw new Error("Room not found");
+    if (!data.user) throw new Error("User not found");
 
-    const action = await this.calculateNextRent(data.property, data);
+    const nextBillingDate = startOfDay(data.property.nextBillingDate);
+    const billedThrough = startOfDay(data.billedThroughDate);
 
-    if (!action) return;
+    // Only generate if we haven't reached nextBillingDate yet
+    if (!isBefore(billedThrough, nextBillingDate)) {
+      console.log(
+        `Tenancy ${tenancyId} already billed through ${format(billedThrough, "dd/MM/yyyy")}`,
+      );
+      return;
+    }
 
-    const description = `Rent (${format(action.start, "dd/MM/yyyy")} - ${format(action.end, "dd/MM/yyyy")})`;
+    const rentAction = this.calculateNextRentPeriod(
+      data.property.rentFrequency,
+      billedThrough,
+      nextBillingDate,
+      data.room.rentAmount,
+    );
+
+    if (!rentAction) return;
+
+    const description = `Rent - ${data.room.name} (${format(rentAction.start, "dd/MM/yyyy")} - ${format(rentAction.end, "dd/MM/yyyy")})`;
 
     try {
       await db.batch([
@@ -310,109 +566,29 @@ export const InvoiceService = {
           propertyId: data.property.id,
           type: "rent",
           description: description,
-          totalAmount: action.amountCents,
-          dueDate: action.start,
+          totalAmount: rentAction.amountCents,
+          dueDate: rentAction.start,
           status: "open",
-          idempotencyKey: action.idempotencyKey,
+          idempotencyKey: `rent-${tenancyId}-${rentAction.end.toISOString().split("T")[0]}`,
         }),
 
         db
           .update(tenancy)
           .set({
-            billedThroughDate: action.end,
+            billedThroughDate: rentAction.end,
             updatedAt: new Date(),
           })
           .where(eq(tenancy.id, tenancyId)),
       ]);
 
-      console.log(`Generated invoice for Tenancy ${tenancyId} [${action.idempotencyKey}]`);
+      console.log(`Generated invoice for Tenancy ${tenancyId}`);
     } catch (e: any) {
       if (e.message && e.message.includes("UNIQUE constraint failed")) {
-        console.log(
-          `Skipping duplicate invoice for Tenancy ${tenancyId}: ${action.idempotencyKey}`,
-        );
+        console.log(`Skipping duplicate invoice for Tenancy ${tenancyId}`);
         return;
       }
       throw e;
     }
-  },
-
-  async calculateNextRent(
-    prop: {
-      rentAmount: number;
-      rentFrequency: "weekly" | "fortnightly" | "monthly";
-      billingAnchorDay: number;
-      createdAt: Date;
-    },
-    ten: {
-      id: number;
-      billedThroughDate: Date;
-      status: string;
-    },
-  ) {
-    if (!["active", "move_in_ready", "pending_agreement", "bond_pending"].includes(ten.status)) {
-      return null;
-    }
-
-    const today = startOfDay(new Date());
-    const periodStart = startOfDay(ten.billedThroughDate);
-
-    if (differenceInDays(periodStart, today) > 60) return null;
-
-    let periodEnd: Date;
-    let description = "";
-    const anchorDay = prop.billingAnchorDay as DayOfWeek;
-
-    if (prop.rentFrequency === "weekly") {
-      const currentDay = getDay(periodStart);
-
-      if (currentDay === anchorDay) {
-        periodEnd = addDays(periodStart, 7);
-      } else {
-        periodEnd = nextDay(periodStart, anchorDay);
-      }
-    } else if (prop.rentFrequency === "fortnightly") {
-      const targetDate =
-        getDay(periodStart) === anchorDay ? periodStart : nextDay(periodStart, anchorDay);
-
-      const weeksFromCreation = differenceInCalendarWeeks(targetDate, prop.createdAt);
-      const isWeekA = weeksFromCreation % 2 === 0;
-
-      periodEnd = addDays(targetDate, 14);
-
-      if (!isSameDay(targetDate, periodStart)) {
-        periodEnd = targetDate;
-      }
-    } else {
-      periodEnd = addMonths(periodStart, 1);
-    }
-
-    const daysInPeriod = differenceInDays(periodEnd, periodStart);
-
-    let amountCents = 0;
-    if (prop.rentFrequency === "monthly") {
-      if (daysInPeriod >= 28 && daysInPeriod <= 31) {
-        amountCents = prop.rentAmount;
-      } else {
-        const dailyRate = Math.floor((prop.rentAmount * 12) / 365);
-        amountCents = dailyRate * daysInPeriod;
-      }
-    } else {
-      const weeklyRate = prop.rentFrequency === "weekly" ? prop.rentAmount : prop.rentAmount / 2;
-      const dailyRate = Math.floor((weeklyRate * 52) / 365);
-
-      if (daysInPeriod === 7 && prop.rentFrequency === "weekly") amountCents = prop.rentAmount;
-      else if (daysInPeriod === 14 && prop.rentFrequency === "fortnightly")
-        amountCents = prop.rentAmount;
-      else amountCents = dailyRate * daysInPeriod;
-    }
-
-    return {
-      start: periodStart,
-      end: periodEnd,
-      amountCents,
-      idempotencyKey: `rent-${ten.id}-${periodEnd.toISOString().split("T")[0]}`,
-    };
   },
 
   /**

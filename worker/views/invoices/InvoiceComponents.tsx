@@ -667,13 +667,14 @@ export const InvoiceTable = ({
         </div>
         <div class="flex gap-2">
           <button
-            hx-get="/admin/invoices/generate"
-            hx-target="#main-content"
-            hx-push-url="true"
-            disabled
+            hx-post="/admin/invoices/generate-all"
+            hx-swap="none"
+            hx-indicator="#generate-spinner"
             class="inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium border border-input bg-background hover:bg-accent h-10 px-4 shadow-sm transition-colors">
-            <i data-lucide="repeat" class="w-4 h-4 text-muted-foreground"></i>
-            Generate Property Invoices (Coming Soon)
+            <div id="generate-spinner" class="htmx-indicator">
+              <i data-lucide="refresh-cw" class="w-4 h-4 text-muted-foreground animate-spin"></i>
+            </div>
+            Generate Property Invoices
           </button>
 
           <button

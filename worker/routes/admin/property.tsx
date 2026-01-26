@@ -17,6 +17,7 @@ import app from "@server/app";
 import { PropertySelector } from "@views/components/NavBar";
 import { SelectionDialog } from "@server/views/components/SelectionDialog";
 import { currencyConvertor } from "@server/lib/utils";
+import { addDays, addMonths } from "date-fns";
 
 export const propertyRoute = new Hono<AppEnv>();
 
@@ -91,11 +92,30 @@ propertyRoute.post(
     const data = c.req.valid("form");
     const userId = c.var.auth.user!.id;
     data.rentAmount = currencyConvertor(data.rentAmount.toString());
+    // Calculate nextBillingDate based on rentFrequency
+    let nextBillingDate: Date;
+    const now = new Date();
+
+    switch (data.rentFrequency) {
+      case "weekly":
+        nextBillingDate = addDays(now, 7);
+        break;
+      case "fortnightly":
+        nextBillingDate = addDays(now, 14);
+        break;
+      case "monthly":
+        nextBillingDate = addMonths(now, 1);
+        break;
+      default:
+        nextBillingDate = now;
+    }
+
     const [newProp] = await db
       .insert(property)
       .values({
         ...data,
         landlordId: userId,
+        nextBillingDate,
       })
       .returning({ id: property.id });
 

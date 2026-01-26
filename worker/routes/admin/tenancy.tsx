@@ -347,6 +347,7 @@ tenancyRoute.get("/:id/edit", async (c) => {
       r.id === record.t.roomId || // The tenancy's current room
       ["vacant_ready", "advertised"].includes(r.status), // Or empty rooms
   );
+  console.log(record.t);
 
   return htmxResponse(
     c,

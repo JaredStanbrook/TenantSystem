@@ -91,15 +91,6 @@ export const SelectionDialog = (props: SelectionDialogProps) => {
               `;
             })}
           </div>
-
-          <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end">
-            <button
-              type="button"
-              onclick="document.getElementById('modal-container').innerHTML = ''"
-              class="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-white hover:text-gray-900 border border-transparent hover:border-gray-300 rounded-md transition-all">
-              Cancel
-            </button>
-          </div>
         </div>
       </div>
     </div>

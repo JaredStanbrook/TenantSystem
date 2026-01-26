@@ -533,12 +533,12 @@ invoiceRoute.post("/tenancy/:id/generate", async (c) => {
         rentAmount: effectiveRentAmount,
       };
 
-      const rentAction = await InvoiceService.calculateNextRent(
-        propertyWithEffectiveRent,
-        tenRecord,
+      const rentAction = await InvoiceService.calculateNextRentPeriod(
+        propertyWithEffectiveRent.rentFrequency,
+        tenRecord.billedThroughDate,
+        propertyWithEffectiveRent.nextBillingDate!, //TODO decided if should be nullable
+        propertyWithEffectiveRent.rentAmount,
       );
-
-      console.log("Rent Action:", rentAction);
 
       if (rentAction) {
         const result = await InvoiceService.createRentInvoice(db, {
@@ -865,5 +865,118 @@ invoiceRoute.post("/:id/payment/:paymentId/revoke-extension", async (c) => {
     console.error("Failed to revoke extension:", error);
     flashToast(c, "Failed to revoke extension", { type: "error" });
     return htmxRedirect(c, `/admin/invoices/${invoiceId}/edit`);
+  }
+});
+
+// POST /admin/invoices/generate/:propertyId
+invoiceRoute.post("/generate/:propertyId", async (c) => {
+  const db = c.var.db;
+  const userId = c.var.auth.user!.id;
+  const propertyId = Number(c.req.param("propertyId"));
+
+  try {
+    // Verify property ownership
+    const [prop] = await db.select().from(property).where(eq(property.id, propertyId));
+
+    if (!prop) {
+      htmxToast(c, "Property not found", { type: "error" });
+      return c.text("Not found", 404);
+    }
+
+    if (prop.landlordId !== userId) {
+      htmxToast(c, "Unauthorized", { type: "error" });
+      return c.text("Unauthorized", 403);
+    }
+
+    // Generate all rent invoices for this property
+    const results = await InvoiceService.generateRentInvoicesForProperty(db, propertyId);
+
+    // Build success message
+    let message = "";
+    if (results.generated > 0) {
+      message = `Generated ${results.generated} invoice${results.generated !== 1 ? "s" : ""}`;
+      if (results.skipped > 0) {
+        message += ` (${results.skipped} already existed)`;
+      }
+    } else if (results.skipped > 0) {
+      message = "All invoices already generated";
+    } else {
+      message = "No invoices to generate";
+    }
+
+    // Show errors if any
+    if (results.errors.length > 0) {
+      htmxToast(c, `${message}. ${results.errors.length} error(s) occurred`, { type: "warning" });
+    } else {
+      htmxToast(c, message, { type: "success" });
+    }
+
+    // Trigger a refresh of the invoice list
+    c.header("HX-Trigger", "invoiceListRefresh");
+
+    return c.text("OK", 200);
+  } catch (error: any) {
+    console.error("Failed to generate invoices:", error);
+    htmxToast(c, "Failed to generate invoices", { type: "error" });
+    return c.text("Error", 500);
+  }
+});
+
+// Alternative: Generate for ALL properties owned by landlord
+// POST /admin/invoices/generate-all
+invoiceRoute.post("/generate-all", async (c) => {
+  const db = c.var.db;
+  const userId = c.var.auth.user!.id;
+
+  try {
+    // Get all properties for this landlord
+    const properties = await db.select().from(property).where(eq(property.landlordId, userId));
+
+    if (properties.length === 0) {
+      htmxToast(c, "No properties found", { type: "info" });
+      return c.text("OK", 200);
+    }
+
+    let totalGenerated = 0;
+    let totalSkipped = 0;
+    const allErrors: string[] = [];
+
+    // Generate invoices for each property
+    for (const prop of properties) {
+      try {
+        const results = await InvoiceService.generateRentInvoicesForProperty(db, prop.id);
+        totalGenerated += results.generated;
+        totalSkipped += results.skipped;
+        allErrors.push(...results.errors);
+      } catch (error: any) {
+        allErrors.push(`Property ${prop.id}: ${error.message}`);
+      }
+    }
+
+    // Build success message
+    let message = "";
+    if (totalGenerated > 0) {
+      message = `Generated ${totalGenerated} invoice${totalGenerated !== 1 ? "s" : ""} across ${properties.length} propert${properties.length !== 1 ? "ies" : "y"}`;
+      if (totalSkipped > 0) {
+        message += ` (${totalSkipped} already existed)`;
+      }
+    } else if (totalSkipped > 0) {
+      message = "All invoices already generated";
+    } else {
+      message = "No invoices to generate";
+    }
+
+    // Show errors if any
+    if (allErrors.length > 0) {
+      htmxToast(c, `${message}. ${allErrors.length} error(s) occurred`, { type: "warning" });
+    } else {
+      htmxToast(c, message, { type: "success" });
+    }
+
+    return c.text("OK", 200);
+  } catch (error: any) {
+    console.error("Failed to generate invoices:", error);
+    htmxToast(c, "Failed to generate invoices", { type: "error" });
+    return c.text("Error", 500);
   }
 });
