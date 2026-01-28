@@ -5,7 +5,7 @@ import { eq, desc, inArray, and, count, sql } from "drizzle-orm";
 import { z } from "zod";
 
 // Domain
-import { invoice } from "@server/schema/invoice.schema";
+import { invoice, InvoiceWithPayment } from "@server/schema/invoice.schema";
 import { room } from "@server/schema/room.schema";
 import { invoicePayment } from "@server/schema/invoicePayment.schema";
 import { users } from "@server/schema/auth.schema";
@@ -76,6 +76,7 @@ invoiceRoute.get("/", async (c) => {
       invoice: invoice,
       propertyName: property.nickname,
       amountPaid: sql<number>`coalesce(sum(${invoicePayment.amountPaid}), 0)`,
+      effectiveDueDate: sql<number>`${invoice.dueDate} + (coalesce(min(${invoicePayment.dueDateExtensionDays}), 0) * 86400)`,
     })
     .from(invoice)
     .innerJoin(property, eq(invoice.propertyId, property.id))
@@ -85,9 +86,9 @@ invoiceRoute.get("/", async (c) => {
     .orderBy(desc(invoice.dueDate))
     .limit(pageSize)
     .offset(offset);
-
   const flatInvoices = invoicesData.map((d) => ({
     ...d.invoice,
+    dueDate: new Date(d.effectiveDueDate * 1000), // Due date with extensions applied
     propertyName: d.propertyName || "Unknown Property",
     amountPaid: d.amountPaid,
   }));

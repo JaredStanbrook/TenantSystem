@@ -66,4 +66,4 @@ export const extensionRequestSchema = z.object({
   requestedDate: z.coerce.date(),
   reason: z.string().optional(),
 });
-export type InvoicePayment = z.infer<typeof insertInvoicePaymentSchema>;
+export type InvoicePayment = z.infer<typeof selectInvoicePaymentSchema>;

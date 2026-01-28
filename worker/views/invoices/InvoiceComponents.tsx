@@ -432,11 +432,20 @@ export const InvoiceForm = ({
 
   // Prepare splits for the TenantSection
   const splits = payments.map((p) => ({
+    id: p.id,
     userId: p.userId,
     userDisplayName: p.userDisplayName,
     userEmail: p.userEmail,
     amountCents: p.amountOwed,
-    extensionDays: p.dueDateExtensionDays || 0,
+    extensionDays: p.dueDateExtensionDays ?? 0,
+    dueDateExtensionDays: p.dueDateExtensionDays,
+    status: p.status,
+    tenantMarkedPaidAt: p.tenantMarkedPaidAt,
+    paymentReference: p.paymentReference,
+    extensionStatus: p.extensionStatus,
+    extensionRequestedDate: p.extensionRequestedDate,
+    extensionReason: p.extensionReason,
+    adminNote: p.adminNote,
   }));
 
   return html`
@@ -549,7 +558,7 @@ export const InvoiceForm = ({
           </div>
 
           <div id="tenant-section-container" class="pt-6 border-t">
-             ${TenantSection({ splits, isLocked, isEdit })}
+             ${TenantSection({ splits, isLocked, isEdit, invoiceId: invoice?.id })}
           </div>
 
           

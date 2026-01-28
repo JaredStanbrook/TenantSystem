@@ -10,7 +10,7 @@ import {
 } from "date-fns";
 
 import { eq, and, sql, ne } from "drizzle-orm";
-import { invoice, INVOICE_STATUSES } from "../schema/invoice.schema";
+import { invoice, INVOICE_STATUSES, InvoiceStatus, InvoiceType } from "../schema/invoice.schema";
 import { invoicePayment } from "../schema/invoicePayment.schema";
 import { property } from "../schema/property.schema";
 import { room } from "../schema/room.schema";
@@ -28,13 +28,13 @@ export interface CreateInvoiceWithPaymentParams {
     description: string;
     totalAmount: number;
     dueDate: Date | number;
-    status?: string;
+    status: InvoiceStatus;
     idempotencyKey?: string;
   };
   payments: Array<{
     userId: string;
     amountOwed: number;
-    status?: string;
+    status: InvoiceStatus;
   }>;
 }
 
@@ -107,7 +107,12 @@ export const InvoiceService = {
 
       const invoiceValues = invoices.map((inv) => ({
         ...inv.invoiceData,
-        status: inv.invoiceData.status || "open",
+        status: (inv.invoiceData.status || "open") as InvoiceStatus,
+        type: inv.invoiceData.type as InvoiceType,
+        dueDate:
+          inv.invoiceData.dueDate instanceof Date
+            ? inv.invoiceData.dueDate
+            : new Date(inv.invoiceData.dueDate),
       }));
 
       const createdInvoices = await db.insert(invoice).values(invoiceValues).returning();
@@ -118,7 +123,7 @@ export const InvoiceService = {
           invoiceId: createdInvoices[index].id,
           userId: payment.userId,
           amountOwed: payment.amountOwed,
-          status: payment.status || "pending",
+          status: (payment.status || "pending") as InvoiceStatus,
         })),
       );
 
@@ -168,7 +173,7 @@ export const InvoiceService = {
           {
             userId: params.userId,
             amountOwed: params.bondAmount,
-            status: "pending",
+            status: "pending" as InvoiceStatus,
           },
         ],
       },
@@ -268,7 +273,8 @@ export const InvoiceService = {
 
   /**
    * Generate rent invoices for ALL tenancies in a property up to nextBillingDate
-   * This is your "bulk generate" button action
+   * Works BACKWARDS from nextBillingDate to generate all missing invoices
+   * Creates ONE invoice per billing cycle (grouped by end date) with prorated payments
    */
   async generateRentInvoicesForProperty(
     db: DrizzleDB,
@@ -291,8 +297,13 @@ export const InvoiceService = {
       return results;
     }
 
+    console.log("Property:", prop.nickname, "Next billing:", prop.nextBillingDate);
+
     const nextBillingDate = startOfDay(prop.nextBillingDate);
     const today = startOfDay(new Date());
+
+    console.log("Next billing date:", nextBillingDate);
+    console.log("Today:", today);
 
     // Get all active tenancies for this property with their rooms and users
     const tenancies = await db
@@ -310,110 +321,268 @@ export const InvoiceService = {
           sql`${tenancy.status} IN ('active', 'move_in_ready', 'pending_agreement', 'bond_pending')`,
         ),
       );
-    console.log(tenancies);
-    // For each tenancy, generate invoices up to nextBillingDate
-    for (const record of tenancies) {
-      if (!record.room || !record.user) {
-        results.errors.push(`Tenancy ${record.tenancy.id} missing room or user`);
-        continue;
+
+    console.log(`Found ${tenancies.length} tenancies`);
+
+    if (tenancies.length === 0) {
+      results.errors.push("No active tenancies found");
+      return results;
+    }
+
+    try {
+      // Get all existing rent invoices for this property
+      const existingInvoices = await db
+        .select({
+          idempotencyKey: invoice.idempotencyKey,
+        })
+        .from(invoice)
+        .where(and(eq(invoice.propertyId, propertyId), eq(invoice.type, "rent")));
+
+      const existingKeys = new Set(existingInvoices.map((inv) => inv.idempotencyKey));
+      console.log(`Found ${existingKeys.size} existing invoices`);
+
+      // Calculate all billing cycles working BACKWARDS from nextBillingDate
+      const billingCycles: Array<{
+        endDate: Date;
+        startDate: Date;
+      }> = [];
+
+      let currentEnd = nextBillingDate;
+      const maxCycles = 100; // Safety limit
+      let cycleCount = 0;
+
+      // Work backwards to build all billing cycles
+      // Stop when we go before the earliest tenancy move-in date
+      const earliestMoveIn = tenancies.reduce(
+        (earliest, t) => {
+          const moveIn = startOfDay(t.tenancy.startDate);
+          return !earliest || isBefore(moveIn, earliest) ? moveIn : earliest;
+        },
+        null as Date | null,
+      );
+
+      if (!earliestMoveIn) {
+        results.errors.push("No valid move-in dates found");
+        return results;
       }
 
-      const ten = record.tenancy;
+      console.log("Earliest move-in date:", format(earliestMoveIn, "dd/MM/yyyy"));
 
-      try {
-        // Get all existing rent invoices for this tenancy to check what's already generated
-        const existingInvoices = await db
-          .select({
-            idempotencyKey: invoice.idempotencyKey,
-            id: invoice.id,
-          })
-          .from(invoice)
-          .where(
-            and(
-              eq(invoice.propertyId, propertyId),
-              eq(invoice.type, "rent"),
-              sql`${invoice.idempotencyKey} LIKE ${"rent-" + ten.id + "-%"}`,
-            ),
+      while (cycleCount < maxCycles) {
+        let cycleStart: Date;
+
+        // Calculate the start of this billing cycle based on frequency
+        if (prop.rentFrequency === "weekly") {
+          cycleStart = addDays(currentEnd, -7);
+        } else if (prop.rentFrequency === "fortnightly") {
+          cycleStart = addDays(currentEnd, -14);
+        } else {
+          cycleStart = addMonths(currentEnd, -1);
+        }
+
+        // Stop if this cycle starts before the earliest move-in date
+        if (isBefore(cycleStart, earliestMoveIn)) {
+          console.log(
+            `Cycle starts before earliest move-in, stopping at ${format(cycleStart, "dd/MM/yyyy")}`,
           );
+          break;
+        }
 
-        const existingKeys = new Set(existingInvoices.map((inv) => inv.idempotencyKey));
+        billingCycles.unshift({
+          startDate: cycleStart,
+          endDate: currentEnd,
+        });
 
-        // Generate invoices until we reach nextBillingDate
-        let currentBilledThrough = startOfDay(ten.billedThroughDate);
-        let invoicesGenerated = 0;
-        while (isBefore(currentBilledThrough, nextBillingDate)) {
-          const rentAction = this.calculateNextRentPeriod(
-            prop.rentFrequency,
-            currentBilledThrough,
-            nextBillingDate,
-            record.room.baseRentAmount,
-          );
+        currentEnd = cycleStart;
+        cycleCount++;
+      }
 
-          if (!rentAction) break;
+      console.log(`Generated ${billingCycles.length} billing cycles`);
 
-          const idempotencyKey = `rent-${ten.id}-${rentAction.end.toISOString().split("T")[0]}`;
+      // For each billing cycle, determine which tenancies need to be billed
+      for (const cycle of billingCycles) {
+        const endDateKey = cycle.endDate.toISOString().split("T")[0];
+        const idempotencyKey = `rent-property-${propertyId}-${endDateKey}`;
 
-          // Check if this invoice already exists
-          if (existingKeys.has(idempotencyKey)) {
-            // Invoice exists, skip creation but move forward
-            currentBilledThrough = rentAction.end;
-            results.skipped++;
+        console.log(
+          `Processing cycle: ${format(cycle.startDate, "dd/MM/yyyy")} -> ${format(cycle.endDate, "dd/MM/yyyy")}`,
+        );
+
+        // Check if invoice already exists
+        if (existingKeys.has(idempotencyKey)) {
+          console.log(`  Invoice already exists: ${idempotencyKey}`);
+          results.skipped++;
+          continue;
+        }
+
+        // Build payments for tenancies that need billing for this cycle
+        const payments: Array<{
+          userId: string;
+          amountOwed: number;
+          status: InvoiceStatus;
+          tenancyId: number;
+        }> = [];
+
+        let totalAmount = 0;
+        let earliestTenancyStart: Date | null = null;
+
+        for (const record of tenancies) {
+          if (!record.room || !record.user) continue;
+
+          const moveInDate = startOfDay(record.tenancy.moveInDate);
+          const billedThrough = startOfDay(record.tenancy.billedThroughDate);
+
+          // Skip if tenancy hasn't moved in yet by end of this cycle
+          if (isAfter(moveInDate, cycle.endDate)) {
+            console.log(`  Tenancy ${record.tenancy.id} hasn't moved in yet`);
             continue;
           }
 
-          // Invoice doesn't exist (either never created or was deleted), create it
-          const result = await this.createInvoicesWithPayments(db, [
-            {
-              invoiceData: {
-                propertyId: propertyId,
-                type: "rent",
-                description: `Rent - ${record.room.name} (${format(rentAction.start, "dd/MM/yyyy")} - ${format(rentAction.end, "dd/MM/yyyy")})`,
-                totalAmount: rentAction.amountCents,
-                dueDate: rentAction.start,
-                status: "open",
-                idempotencyKey,
-              },
-              payments: [
-                {
-                  userId: record.user.id,
-                  amountOwed: rentAction.amountCents,
-                  status: "pending",
-                },
-              ],
-            },
-          ]);
+          // Skip if tenancy is already billed through this cycle
+          if (!isBefore(billedThrough, cycle.endDate)) {
+            console.log(
+              `  Tenancy ${record.tenancy.id} already billed through ${format(billedThrough, "dd/MM/yyyy")}`,
+            );
+            continue;
+          }
 
-          if (result.success) {
-            // Update tenancy's billedThroughDate
+          // Determine the actual billing period for this tenancy
+          // It starts at the LATER of: cycle start or their last billedThroughDate
+          let tenancyPeriodStart: Date;
 
-            await db
-              .update(tenancy)
-              .set({
-                //TODO : Tenant billedThroughDate should only be updated once the invoice is paid
-                updatedAt: new Date(),
-              })
-              .where(eq(tenancy.id, ten.id));
-
-            currentBilledThrough = rentAction.end;
-            invoicesGenerated++;
-
-            // Add to existing keys set to prevent duplicates in same run
-            existingKeys.add(idempotencyKey);
-          } else if (result.message === "IDEMPOTENCY_VIOLATION") {
-            // Edge case: created between our check and now
-            currentBilledThrough = rentAction.end;
-            results.skipped++;
-            existingKeys.add(idempotencyKey);
+          if (isBefore(billedThrough, cycle.startDate)) {
+            // They're behind - bill from cycle start (or move-in if later)
+            tenancyPeriodStart = isAfter(moveInDate, cycle.startDate)
+              ? moveInDate
+              : cycle.startDate;
           } else {
-            results.errors.push(`Failed to create invoice for tenancy ${ten.id}`);
-            break;
+            // They're partially billed - bill from where they left off
+            tenancyPeriodStart = billedThrough;
+          }
+
+          // If tenancy starts after cycle ends, skip
+          if (!isBefore(tenancyPeriodStart, cycle.endDate)) {
+            console.log(
+              `  Tenancy ${record.tenancy.id} period start (${format(tenancyPeriodStart, "dd/MM/yyyy")}) is not before cycle end`,
+            );
+            continue;
+          }
+
+          const daysInPeriod = differenceInDays(cycle.endDate, tenancyPeriodStart);
+
+          if (daysInPeriod <= 0) {
+            console.log(`  Tenancy ${record.tenancy.id} has no days in this period`);
+            continue;
+          }
+
+          console.log(
+            `  Tenancy ${record.tenancy.id}: ${format(tenancyPeriodStart, "dd/MM/yyyy")} -> ${format(cycle.endDate, "dd/MM/yyyy")} (${daysInPeriod} days)`,
+          );
+
+          // Calculate prorated amount
+          let amountCents = 0;
+
+          if (prop.rentFrequency === "monthly") {
+            if (daysInPeriod >= 28 && daysInPeriod <= 31) {
+              amountCents = record.room.baseRentAmount;
+            } else {
+              const dailyRate = Math.floor((record.room.baseRentAmount * 12) / 365);
+              amountCents = dailyRate * daysInPeriod;
+            }
+          } else {
+            const weeklyRate =
+              prop.rentFrequency === "weekly"
+                ? record.room.baseRentAmount
+                : record.room.baseRentAmount / 2;
+            const dailyRate = Math.floor((weeklyRate * 52) / 365);
+
+            if (daysInPeriod === 7 && prop.rentFrequency === "weekly") {
+              amountCents = record.room.baseRentAmount;
+            } else if (daysInPeriod === 14 && prop.rentFrequency === "fortnightly") {
+              amountCents = record.room.baseRentAmount;
+            } else {
+              amountCents = dailyRate * daysInPeriod;
+            }
+          }
+
+          console.log(
+            `  Amount for tenancy ${record.tenancy.id}: $${(amountCents / 100).toFixed(2)}`,
+          );
+
+          payments.push({
+            userId: record.user.id,
+            amountOwed: amountCents,
+            status: "pending",
+            tenancyId: record.tenancy.id,
+          });
+
+          totalAmount += amountCents;
+
+          // Track earliest start for invoice due date
+          if (!earliestTenancyStart || isBefore(tenancyPeriodStart, earliestTenancyStart)) {
+            earliestTenancyStart = tenancyPeriodStart;
           }
         }
 
-        results.generated += invoicesGenerated;
-      } catch (error: any) {
-        results.errors.push(`Error processing tenancy ${ten.id}: ${error.message}`);
+        if (payments.length === 0) {
+          console.log(`  No payments needed for this cycle`);
+          continue;
+        }
+
+        console.log(
+          `  Creating invoice with ${payments.length} payments, total: $${(totalAmount / 100).toFixed(2)}`,
+        );
+
+        // Create invoice for this billing cycle
+        const result = await this.createInvoicesWithPayments(db, [
+          {
+            invoiceData: {
+              propertyId: propertyId,
+              type: "rent",
+              description: `Rent - ${prop.nickname || "Property"} (${format(cycle.startDate, "dd/MM/yyyy")} - ${format(cycle.endDate, "dd/MM/yyyy")})`,
+              totalAmount: totalAmount,
+              dueDate: earliestTenancyStart || cycle.startDate,
+              status: "open",
+              idempotencyKey,
+            },
+            payments: payments.map((p) => ({
+              userId: p.userId,
+              amountOwed: p.amountOwed,
+              status: p.status,
+            })),
+          },
+        ]);
+
+        if (result.success) {
+          console.log(`  Successfully created invoice`);
+
+          // Update billedThroughDate for all tenancies that were billed
+          for (const payment of payments) {
+            await db
+              .update(tenancy)
+              .set({
+                billedThroughDate: cycle.endDate,
+                updatedAt: new Date(),
+              })
+              .where(eq(tenancy.id, payment.tenancyId));
+          }
+
+          results.generated++;
+          existingKeys.add(idempotencyKey);
+        } else if (result.message === "IDEMPOTENCY_VIOLATION") {
+          console.log(`  Idempotency violation`);
+          results.skipped++;
+          existingKeys.add(idempotencyKey);
+        } else {
+          console.error(`  Failed to create invoice`);
+          results.errors.push(
+            `Failed to create invoice for cycle ending ${format(cycle.endDate, "dd/MM/yyyy")}`,
+          );
+        }
       }
+    } catch (error: any) {
+      console.error("Error in generateRentInvoicesForProperty:", error);
+      results.errors.push(`Error processing property ${propertyId}: ${error.message}`);
     }
 
     // Only advance nextBillingDate if we've reached or passed it
@@ -423,7 +592,6 @@ export const InvoiceService = {
 
     return results;
   },
-
   /**
    * Calculate the next rent period for a tenancy
    * Returns the period from billedThroughDate up to (but not beyond) nextBillingDate

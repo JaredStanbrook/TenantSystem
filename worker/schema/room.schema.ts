@@ -30,7 +30,7 @@ export const room = sqliteTable("room", {
     .default("vacant_ready")
     .notNull(),
 
-  baseRentAmount: integer("base_rent_amount"), // Default rent for this specific room
+  baseRentAmount: integer("base_rent_amount").notNull(), // Default rent for this specific room
 });
 
 export const insertRoomSchema = createInsertSchema(room);

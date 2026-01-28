@@ -4,6 +4,7 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { property } from "./property.schema";
+import { InvoicePayment } from "./invoicePayment.schema";
 
 // --- Enums & Constants ---
 export const INVOICE_TYPES = [
@@ -75,3 +76,6 @@ export const insertInvoiceSchema = createInsertSchema(invoice, {
 
 export const selectInvoiceSchema = createSelectSchema(invoice);
 export type Invoice = z.infer<typeof selectInvoiceSchema>;
+export type InvoiceWithPayment = Invoice & {
+  payment: InvoicePayment;
+}; //TODO invoices are currently only paid in one payment not multiple
