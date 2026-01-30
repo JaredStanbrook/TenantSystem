@@ -19,6 +19,7 @@ import { tenancyRoute } from "./routes/admin/tenancy.tsx";
 import { roomRoute } from "./routes/admin/room.ts";
 import { dashboardRoute } from "./routes/admin/dashboard.tsx";
 import { requireUser, requireRole } from "./middleware/guard.middleware.ts";
+import devRouter from "./routes/dev.tsx";
 
 // ==========================================
 // 1. ADMIN SUB-APP (Protected by RBAC)
@@ -39,6 +40,7 @@ admin.route("/rooms", roomRoute);
 // 2. MAIN APP
 // ==========================================
 const app = new Hono<AppEnv>()
+  .route("/dev", devRouter)
   // Global renderer (HTMX layout wrapper)
   .use("*", globalRenderer)
 
@@ -80,7 +82,7 @@ const app = new Hono<AppEnv>()
     zValidator("form", z.object({ propertyId: z.string() })),
     async (c) => {
       const { propertyId } = c.req.valid("form");
-
+      console.log("Switching context to property ID:", propertyId);
       if (propertyId === "all") {
         // "View All" - remove the filter
         deleteCookie(c, "selected_property_id");
@@ -99,7 +101,7 @@ const app = new Hono<AppEnv>()
       // so the new cookie takes effect on the UI
       c.header("HX-Refresh", "true");
       return c.body(null);
-    }
+    },
   )
 
   // ==========================================

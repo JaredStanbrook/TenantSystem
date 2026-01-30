@@ -3,7 +3,7 @@ import { html } from "hono/html";
 import { getCookie } from "hono/cookie";
 import { zValidator } from "@hono/zod-validator";
 import { property, formPropertySchema } from "@server/schema/property.schema";
-import { room } from "@server/schema/room.schema";
+import { room, RoomStatus } from "@server/schema/room.schema";
 import { eq, desc, and } from "drizzle-orm";
 import {
   PropertyTable,
@@ -13,8 +13,10 @@ import {
 import { RoomTable } from "@views/properties/RoomComponents";
 import { htmxResponse, htmxToast, htmxPushUrl } from "@server/lib/htmx-helpers";
 import type { AppEnv } from "@server/types";
-import app from "@server/app";
 import { PropertySelector } from "@views/components/NavBar";
+import { SelectionDialog } from "@server/views/components/SelectionDialog";
+import { currencyConvertor } from "@server/lib/utils";
+import { addDays, addMonths } from "date-fns";
 
 export const propertyRoute = new Hono<AppEnv>();
 
@@ -50,7 +52,7 @@ propertyRoute.get("/:propId/rooms", async (c) => {
   return htmxResponse(
     c,
     `${prop.nickname || "Property"} Rooms`,
-    RoomTable({ rooms, propertyName: prop.nickname || prop.addressLine1, propertyId: propId })
+    RoomTable({ rooms, propertyName: prop.nickname || prop.addressLine1, propertyId: propId }),
   );
 });
 
@@ -88,17 +90,41 @@ propertyRoute.post(
     const db = c.var.db;
     const data = c.req.valid("form");
     const userId = c.var.auth.user!.id;
+    data.rentAmount = currencyConvertor(data.rentAmount.toString());
+    // Calculate nextBillingDate based on rentFrequency
+    let nextBillingDate: Date;
+    const now = new Date();
+
+    switch (data.rentFrequency) {
+      case "weekly":
+        nextBillingDate = addDays(now, 7);
+        break;
+      case "fortnightly":
+        nextBillingDate = addDays(now, 14);
+        break;
+      case "monthly":
+        nextBillingDate = addMonths(now, 1);
+        break;
+      default:
+        nextBillingDate = now;
+    }
 
     const [newProp] = await db
       .insert(property)
       .values({
         ...data,
         landlordId: userId,
+        nextBillingDate,
       })
       .returning({ id: property.id });
 
     if (data.bedrooms > 0) {
-      const roomsToCreate = [];
+      const roomsToCreate: Array<{
+        propertyId: number;
+        name: string;
+        status: RoomStatus;
+        baseRentAmount: number;
+      }> = [];
       for (let i = 1; i <= data.bedrooms; i++) {
         roomsToCreate.push({
           propertyId: newProp.id,
@@ -135,7 +161,7 @@ propertyRoute.post(
         })}
       </div>
     `);
-  }
+  },
 );
 
 // 4. GET /admin/properties/:id/edit -> Render Edit Form
@@ -156,7 +182,7 @@ propertyRoute.get("/:id/edit", async (c) => {
     PropertyForm({
       prop,
       action: `/admin/properties/${id}/update`,
-    })
+    }),
   );
 });
 
@@ -179,7 +205,7 @@ propertyRoute.post(
           prop: { ...rawBody, id: Number(id) },
           action: `/admin/properties/${id}/update`,
           errors: fieldErrors,
-        })
+        }),
       );
     }
   }),
@@ -204,25 +230,52 @@ propertyRoute.post(
 
     // --- INTERCEPTION LOGIC ---
     if (targetCount !== currentCount && !data.rentStrategy) {
+      // 1. Calculate variables for the message logic
+      const isAdding = targetCount > currentCount;
+      const diff = Math.abs(targetCount - currentCount);
+      const actionText = isAdding ? "adding" : "removing";
+
       return c.html(html`
         ${PropertyForm({
           prop: { ...data, id },
           action: `/admin/properties/${id}/update`,
         })}
-        ${RentReconciliationModal({
-          id,
-          currentCount,
-          targetCount,
-          currentRent: existing.rentAmount,
-          targetRent: data.rentAmount,
-          formPayload: data,
+        ${SelectionDialog({
+          title: "Rent Adjustment Required",
+          message: `You are ${actionText} <strong>${diff} room(s)</strong>. How should this affect the rent?`,
+
+          choices: [
+            {
+              label: `Keep Property Rent at $${data.rentAmount}`,
+              value: "distribute_property_rent",
+              description: `Rescale ${isAdding ? "all" : "remaining"} room prices proportionally.`,
+              icon: "scale",
+              target: "#main-content",
+            },
+            {
+              label: "Preserve Individual Room Rates",
+              value: "preserve_room_rates",
+              description: "Keep existing room prices. Property rent updates automatically.",
+              icon: "lock",
+              target: "#main-content",
+            },
+          ],
+
+          submitConfig: {
+            url: `/admin/properties/${id}/update`,
+            method: "post",
+            selectionKey: "rentStrategy",
+            payload: data,
+            // You can leave target undefined here since we override it above
+            // Or set a default: target: "#main-content"
+          },
         })}
       `);
     }
 
     // --- CALCULATION & BATCHING ---
     const batchOperations = [];
-    let finalPropertyRent = data.rentAmount;
+    let finalPropertyRent = currencyConvertor(data.rentAmount.toString());
 
     // Determine the base rent for new rooms (default 0 for manual strategies)
     let newRoomBaseRent = 0;
@@ -255,7 +308,7 @@ propertyRoute.post(
       // Update ALL kept rooms to be even
       for (const r of roomsToKeep) {
         batchOperations.push(
-          db.update(room).set({ baseRentAmount: newRoomBaseRent }).where(eq(room.id, r.id))
+          db.update(room).set({ baseRentAmount: newRoomBaseRent }).where(eq(room.id, r.id)),
         );
       }
     }
@@ -266,7 +319,7 @@ propertyRoute.post(
       db
         .update(property)
         .set({ ...data, rentAmount: finalPropertyRent, updatedAt: new Date() })
-        .where(eq(property.id, id))
+        .where(eq(property.id, id)),
     );
 
     // Add Rooms
@@ -279,7 +332,7 @@ propertyRoute.post(
             name: `Room ${currentCount + i + 1}`,
             status: "vacant_ready",
             baseRentAmount: newRoomBaseRent, // Uses 0 for preserve, or the even split for distribute
-          })
+          }),
         );
       }
     }
@@ -319,7 +372,7 @@ propertyRoute.post(
 
       <div hx-swap-oob="innerHTML:#modal-container"></div>
     `);
-  }
+  },
 );
 
 // 6. DELETE /admin/properties/:id -> Handle Delete
@@ -347,5 +400,3 @@ propertyRoute.delete("/:id", async (c) => {
     </div>
   `);
 });
-
-export default app;

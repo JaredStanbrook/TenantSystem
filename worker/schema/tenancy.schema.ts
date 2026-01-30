@@ -39,14 +39,13 @@ export const tenancy = sqliteTable("tenancy", {
 
   startDate: integer("start_date", { mode: "timestamp" }).notNull(),
   endDate: integer("end_date", { mode: "timestamp" }),
-
-  agreedRentAmount: integer("agreed_rent_amount"),
   bondAmount: integer("bond_amount"), // Track bond specifically
 
   createdAt: integer("created_at", { mode: "timestamp" })
     .default(sql`(unixepoch())`)
     .notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).$onUpdate(() => new Date()),
+  billedThroughDate: integer("billed_through_date", { mode: "timestamp" }).notNull(),
 });
 
 // --- Zod Schemas ---
@@ -59,7 +58,12 @@ export const createTenancyFormSchema = z.object({
   bondAmount: z.preprocess(emptyToUndefined, z.coerce.number().optional()),
 });
 
-export const updateTenancyFormSchema = createTenancyFormSchema.omit({ email: true });
+export const updateTenancyFormSchema = createTenancyFormSchema
+  .omit({ email: true })
+  .extend({
+    status: z.enum(TENANCY_STATUS_VALUES).optional(),
+    billedThroughDate: z.coerce.date().optional(),
+  });
 
 export const selectTenancySchema = createSelectSchema(tenancy);
 export type Tenancy = z.infer<typeof selectTenancySchema>;

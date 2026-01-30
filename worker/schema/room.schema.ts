@@ -30,11 +30,12 @@ export const room = sqliteTable("room", {
     .default("vacant_ready")
     .notNull(),
 
-  baseRentAmount: integer("base_rent_amount"), // Default rent for this specific room
+  baseRentAmount: integer("base_rent_amount").notNull(), // Default rent for this specific room
 });
 
 export const insertRoomSchema = createInsertSchema(room);
 export const selectRoomSchema = createSelectSchema(room);
+export type RoomStatus = (typeof ROOM_STATUS_VALUES)[number];
 
 // Safe Room for Public/Tenant views
 export const safeRoomSchema = selectRoomSchema.pick({

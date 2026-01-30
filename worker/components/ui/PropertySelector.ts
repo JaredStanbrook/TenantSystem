@@ -1,7 +1,6 @@
 import { LitElement, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { createIcons, ChevronsUpDown, Check, Building } from "lucide";
-import { api } from "../lib/utils"; // Your API client
 
 @customElement("nav-property-selector")
 export class NavPropertySelector extends LitElement {
@@ -34,9 +33,13 @@ export class NavPropertySelector extends LitElement {
     try {
       // 1. Send the change to the server (sets the cookie)
       // Note: Assuming your API handles { propertyId: 'all' } or { propertyId: 123 }
-      await api.session.property.$post({
-        json: { propertyId: String(propertyId) },
+      const body = new URLSearchParams({ propertyId: String(propertyId) });
+      const response = await fetch("/session/property", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body,
       });
+      if (!response.ok) throw new Error("Failed to switch property");
 
       // 2. RELOAD the page to apply the new context globally
       window.location.reload();

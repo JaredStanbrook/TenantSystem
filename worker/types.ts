@@ -7,7 +7,6 @@ export type Bindings = {
   DB: D1Database;
   ASSETS: Fetcher;
   BLOG: R2Bucket;
-  RATE_LIMITER: RateLimit;
 };
 export type Variables = {
   db: ReturnType<typeof drizzle>;

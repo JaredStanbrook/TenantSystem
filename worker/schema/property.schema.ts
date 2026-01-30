@@ -52,6 +52,7 @@ export const property = sqliteTable("property", {
     .default(sql`(unixepoch())`)
     .notNull()
     .$onUpdate(() => new Date()),
+  nextBillingDate: integer("next_billing_date", { mode: "timestamp" }),
 });
 
 // --- 2. Zod Schemas for Validation ---

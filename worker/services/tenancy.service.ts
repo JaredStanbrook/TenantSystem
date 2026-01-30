@@ -1,4 +1,5 @@
 // server/services/tenancy.service.ts
+
 import { eq } from "drizzle-orm";
 import { tenancy, type Tenancy } from "@server/schema/tenancy.schema";
 import { property } from "@server/schema/property.schema";
@@ -60,7 +61,7 @@ export class TenancyService {
     tenancyId: number,
     newStatus: TenancyStatus,
     actorId: string,
-    force: boolean = false // Add force parameter
+    force: boolean = false, // Add force parameter
   ): Promise<Tenancy> {
     const [record] = await this.db
       .select({ t: tenancy, p: property })

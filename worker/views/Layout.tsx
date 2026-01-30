@@ -95,7 +95,7 @@ export const Layout: FC<LayoutProps> = (props) => {
         <footer class="py-6 md:px-8 md:py-0">
           <div class="flex flex-col items-center justify-between gap-4 md:h-24 md:flex-row">
             <p class="text-center text-sm leading-loose text-muted-foreground md:text-left">
-              Built with Hono & Lit.
+              Built for small landlords. Simple, reliable, tenant-friendly.
             </p>
           </div>
         </footer>

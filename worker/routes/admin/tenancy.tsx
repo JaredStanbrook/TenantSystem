@@ -19,6 +19,8 @@ import { htmxResponse, htmxToast, htmxRedirect, flashToast } from "@server/lib/h
 import type { AppEnv } from "@server/types";
 import { getCookie } from "hono/cookie";
 import { html } from "hono/html"; // For the OOB/Partial helpers
+import { SelectionDialog } from "@server/views/components/SelectionDialog";
+import { currencyConvertor } from "@server/lib/utils";
 
 export const tenancyRoute = new Hono<AppEnv>();
 
@@ -59,7 +61,7 @@ tenancyRoute.get("/", async (c) => {
   const whereClause = and(
     eq(property.landlordId, user.id),
     globalPropertyId ? eq(tenancy.propertyId, globalPropertyId) : undefined,
-    showAll ? undefined : ne(tenancy.status, "closed")
+    showAll ? undefined : ne(tenancy.status, "closed"),
   );
 
   const results = await db
@@ -111,8 +113,8 @@ tenancyRoute.get("/create", async (c) => {
       .where(
         and(
           eq(room.propertyId, Number(selectedPropCookie)),
-          or(eq(room.status, "vacant_ready"), eq(room.status, "advertised"))
-        )
+          or(eq(room.status, "vacant_ready"), eq(room.status, "advertised")),
+        ),
       );
   }
 
@@ -121,9 +123,10 @@ tenancyRoute.get("/create", async (c) => {
     "Add Tenancy",
     TenancyForm({
       properties: myProperties,
-      rooms: availableRooms, // Pass available rooms to the form
       action: "/admin/tenancies",
-    })
+    }),
+    // TODO rooms: availableRooms, We would pass available rooms to the form
+    // but we load them dynamically to avoid confusion
   );
 });
 
@@ -142,8 +145,8 @@ tenancyRoute.get("/rooms-select", async (c) => {
       and(
         eq(room.propertyId, propertyId),
         // Only show rooms that can actually take a tenancy
-        inArray(room.status, ["vacant_ready", "vacant_maintenance", "advertised"])
-      )
+        inArray(room.status, ["vacant_ready", "vacant_maintenance", "advertised"]),
+      ),
     );
 
   if (availableRooms.length === 0) {
@@ -153,7 +156,7 @@ tenancyRoute.get("/rooms-select", async (c) => {
   return c.html(html`
     <option value="">Select a Room...</option>
     ${availableRooms.map(
-      (r) => html`<option value="${r.id}">${r.name} (${r.status.replace("_", " ")})</option>`
+      (r) => html`<option value="${r.id}">${r.name} (${r.status.replace("_", " ")})</option>`,
     )}
   `);
 });
@@ -178,8 +181,8 @@ tenancyRoute.post("/", zValidator("form", createTenancyFormSchema), async (c) =>
       .where(
         and(
           eq(room.propertyId, data.propertyId),
-          or(eq(room.status, "vacant_ready"), eq(room.status, "advertised"))
-        )
+          or(eq(room.status, "vacant_ready"), eq(room.status, "advertised")),
+        ),
       );
 
     htmxToast(c, message, { type: "error" });
@@ -192,7 +195,7 @@ tenancyRoute.post("/", zValidator("form", createTenancyFormSchema), async (c) =>
         action: "/admin/tenancies",
         emailValue: data.email,
         errors: field ? { [field]: [message] } : undefined,
-      })
+      }),
     );
   };
 
@@ -211,6 +214,16 @@ tenancyRoute.post("/", zValidator("form", createTenancyFormSchema), async (c) =>
     const [targetUser] = await db.select().from(users).where(eq(users.email, data.email));
     if (!targetUser) return renderError("User not found.", "email");
 
+    // B1. Check if user already has an active tenancy for this property
+    const [existingTenancy] = await db
+      .select()
+      .from(tenancy)
+      .where(and(eq(tenancy.userId, targetUser.id), ne(tenancy.status, "closed")));
+
+    if (existingTenancy) {
+      return renderError(`This user already has an active tenancy.`, "email");
+    }
+
     // C. Validate Room Availability (Backend Check)
     if (data.roomId) {
       const [targetRoom] = await db
@@ -226,39 +239,79 @@ tenancyRoute.post("/", zValidator("form", createTenancyFormSchema), async (c) =>
       if (!validStatuses.includes(targetRoom.status)) {
         return renderError(
           `Room is currently ${targetRoom.status.replace("_", " ")} and cannot receive a tenant.`,
-          "roomId"
+          "roomId",
         );
       }
     }
-
-    // 2. Execution Phase (Batch Writes)
-    const batchStatements = [];
-
-    // Statement 1: Insert Tenancy
-    batchStatements.push(
-      db.insert(tenancy).values({
+    const [newTenancy] = await db
+      .insert(tenancy)
+      .values({
         propertyId: data.propertyId,
         roomId: data.roomId,
         startDate: data.startDate,
+        billedThroughDate: data.startDate, // Initial cursor as discussed
         endDate: data.endDate,
-        bondAmount: data.bondAmount,
+        bondAmount: currencyConvertor(data.bondAmount!.toString()),
         userId: targetUser.id,
         status: "pending_agreement",
       })
-    );
+      .returning({ id: tenancy.id }); // Extract only what you need
 
-    // Statement 2: Update Room Status (Conditional)
+    // 2. Update Room Status (Conditional)
     if (data.roomId) {
-      batchStatements.push(
-        db.update(room).set({ status: "prospective" }).where(eq(room.id, data.roomId))
-      );
+      await db.update(room).set({ status: "prospective" }).where(eq(room.id, data.roomId));
     }
 
-    // Execute atomically
-    await db.batch(batchStatements as [any, ...any[]]);
+    //TODO: After insert tenant ask if they like to automatically generate bond invoice and initial rent invoice to catch up to property.billingAnchorDay
+    return c.html(html`
+      ${TenancyForm({
+        action: "/admin/tenancies",
+      })}
+      ${SelectionDialog({
+        title: "Tenancy Created Successfully",
+        message: `The tenant has been added. Would you like to generate the initial invoices now?`,
 
-    flashToast(c, "Tenancy Initiated", { type: "success" });
-    return htmxRedirect(c, "/admin/tenancies");
+        choices: [
+          {
+            label: "Generate Bond & Rent Catch-up",
+            value: "all",
+            description:
+              "Create a bond invoice and calculate pro-rata rent to align with the property cycle.",
+            icon: "file-plus", // Assuming you have an icon system
+            target: "#main-content", // Where to swap the result
+          },
+          {
+            label: "Rent Catch-up Only",
+            value: "rent_only",
+            description: "Skip bond for now, but align rent cycle.",
+            icon: "calendar-check",
+            target: "#main-content",
+          },
+          {
+            label: "Bond Only",
+            value: "bond_only",
+            description: "Create bond invoice only.",
+            icon: "shield-lock",
+            target: "#main-content",
+          },
+          {
+            label: "Skip Invoice Generation",
+            value: "skip",
+            description: "I will create invoices manually later.",
+            icon: "x-circle",
+            target: "#main-content",
+          },
+        ],
+
+        submitConfig: {
+          url: `/admin/invoices/tenancy/${newTenancy.id}/generate`,
+          method: "post",
+          selectionKey: "strategy", // The name of the form field containing the value
+          payload: {}, // No extra payload needed, ID is in URL
+        },
+      })}
+    `);
+    // return htmxRedirect(c, "/admin/tenancies");
   } catch (error: any) {
     console.error("Tenancy creation failed:", error);
     return renderError("An unexpected error occurred. Please try again.");
@@ -292,19 +345,18 @@ tenancyRoute.get("/:id/edit", async (c) => {
   const validRooms = propertyRooms.filter(
     (r) =>
       r.id === record.t.roomId || // The tenancy's current room
-      ["vacant_ready", "advertised"].includes(r.status) // Or empty rooms
+      ["vacant_ready", "advertised"].includes(r.status), // Or empty rooms
   );
-
   return htmxResponse(
     c,
     "Edit Tenancy",
     TenancyForm({
       tenancy: record.t,
-      emailValue: record.u.email,
+      emailValue: record.u.email ?? "",
       properties: myProperties,
       rooms: validRooms, // Pass filtered rooms
       action: `/admin/tenancies/${id}/update`,
-    })
+    }),
   );
 });
 
@@ -336,6 +388,11 @@ tenancyRoute.post("/:id/update", zValidator("form", updateTenancyFormSchema), as
   }
 
   // 3. Update Tenancy
+  const nextBondAmount =
+    data.bondAmount === undefined ? existing.t.bondAmount : currencyConvertor(data.bondAmount.toString());
+  const nextBilledThroughDate = data.billedThroughDate ?? existing.t.billedThroughDate;
+  const nextStatus = data.status ?? existing.t.status;
+
   await db
     .update(tenancy)
     .set({
@@ -343,7 +400,9 @@ tenancyRoute.post("/:id/update", zValidator("form", updateTenancyFormSchema), as
       roomId: data.roomId,
       startDate: data.startDate,
       endDate: data.endDate,
-      status: data.status,
+      bondAmount: nextBondAmount,
+      billedThroughDate: nextBilledThroughDate,
+      status: nextStatus,
       updatedAt: new Date(),
     })
     .where(eq(tenancy.id, id));
@@ -396,7 +455,7 @@ tenancyRoute.patch("/:id/status", zValidator("form", statusUpdateSchema), async 
             },
           })}
         `,
-        409
+        409,
       );
     }
 
@@ -406,4 +465,30 @@ tenancyRoute.patch("/:id/status", zValidator("form", statusUpdateSchema), async 
     // Reset UI to server state (undo optimistic UI if any)
     return c.html(TenancyStatusManager({ tenancy: currentTenancy }), 400);
   }
+});
+// --- 8. DELETE /admin/tenancies/:id ---
+tenancyRoute.delete("/:id", async (c) => {
+  const db = c.var.db;
+  const id = Number(c.req.param("id"));
+  const landlordId = c.var.auth.user!.id;
+
+  // Verify ownership
+  const [existing] = await db
+    .select({ t: tenancy, p: property })
+    .from(tenancy)
+    .innerJoin(property, eq(tenancy.propertyId, property.id))
+    .where(eq(tenancy.id, id));
+
+  if (!existing || existing.p.landlordId !== landlordId) return c.text("Unauthorized", 403);
+
+  // Mark room as vacant if linked
+  if (existing.t.roomId) {
+    await db.update(room).set({ status: "vacant_ready" }).where(eq(room.id, existing.t.roomId));
+  }
+
+  // Delete tenancy
+  await db.delete(tenancy).where(eq(tenancy.id, id));
+
+  htmxToast(c, "Tenancy Deleted", { type: "success" });
+  return c.html(""); // Return empty response for HTMX to replace the row
 });

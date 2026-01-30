@@ -2,15 +2,13 @@
 import { html } from "hono/html";
 import { Invoice } from "../../schema/invoice.schema";
 import { invoicePayment } from "../../schema/invoicePayment.schema";
+import { formatCents } from "../lib/utils";
 
 // Type aggregation for the view
 type ExpenseView = {
   payment: typeof invoicePayment.$inferSelect;
   invoice: Invoice;
 };
-
-const formatMoney = (cents: number) =>
-  new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(cents / 100);
 
 const formatDate = (date: Date | null) =>
   date ? new Intl.DateTimeFormat("en-AU", { dateStyle: "medium" }).format(date) : "-";
@@ -71,7 +69,7 @@ export const ExpenseCard = (item: ExpenseView) => {
       <div class="grid grid-cols-2 gap-4 text-sm">
         <div>
           <span class="text-muted-foreground block">Amount Due</span>
-          <span class="font-bold text-lg">${formatMoney(payment.amountOwed)}</span>
+          <span class="font-bold text-lg">${formatCents(payment.amountOwed)}</span>
         </div>
         <div class="text-right">
           <span class="text-muted-foreground block">Due Date</span>
@@ -178,7 +176,7 @@ export const MarkPaidModal = (paymentId: number, amount: number) => html`
       <form hx-post="/expense/${paymentId}/pay" hx-target="#main-content">
         <div class="space-y-4">
           <p class="text-sm text-muted-foreground">
-            You are marking <strong>${formatMoney(amount)}</strong> as paid. This will notify the
+            You are marking <strong>${formatCents(amount)}</strong> as paid. This will notify the
             landlord.
           </p>
 
@@ -188,7 +186,7 @@ export const MarkPaidModal = (paymentId: number, amount: number) => html`
               type="text"
               name="reference"
               placeholder="e.g. Bank Transfer ID"
-              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+              class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
           </div>
         </div>
 
@@ -196,12 +194,12 @@ export const MarkPaidModal = (paymentId: number, amount: number) => html`
           <button
             type="button"
             onclick="this.closest('.fixed').remove()"
-            class="px-4 py-2 text-sm font-medium hover:bg-accent rounded-md">
+            class="px-4 py-2 text-sm font-medium hover:bg-accent rounded-lg">
             Cancel
           </button>
           <button
             type="submit"
-            class="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded-md">
+            class="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg">
             Confirm Payment
           </button>
         </div>
@@ -232,7 +230,7 @@ export const RequestExtensionModal = (paymentId: number, dueDate: Date) => html`
               name="requestedDate"
               required
               min="${new Date().toISOString().split("T")[0]}"
-              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+              class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
             <p class="text-xs text-muted-foreground">Original Due Date: ${formatDate(dueDate)}</p>
           </div>
 
@@ -242,7 +240,7 @@ export const RequestExtensionModal = (paymentId: number, dueDate: Date) => html`
               name="reason"
               rows="3"
               placeholder="Briefly explain why you need more time..."
-              class="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm"></textarea>
+              class="flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"></textarea>
           </div>
         </div>
 
@@ -250,12 +248,12 @@ export const RequestExtensionModal = (paymentId: number, dueDate: Date) => html`
           <button
             type="button"
             onclick="this.closest('.fixed').remove()"
-            class="px-4 py-2 text-sm font-medium hover:bg-accent rounded-md">
+            class="px-4 py-2 text-sm font-medium hover:bg-accent rounded-lg">
             Cancel
           </button>
           <button
             type="submit"
-            class="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded-md">
+            class="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg">
             Submit Request
           </button>
         </div>

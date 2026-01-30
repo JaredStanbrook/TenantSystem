@@ -6,6 +6,7 @@ import { room } from "@server/schema/room.schema";
 import { property } from "@server/schema/property.schema";
 import { RoomTable, RoomForm } from "@views/properties/RoomComponents";
 import { htmxResponse, htmxToast } from "@server/lib/htmx-helpers";
+import { currencyConvertor } from "@server/lib/utils";
 import type { AppEnv } from "@server/types";
 
 export const roomRoute = new Hono<AppEnv>();
@@ -50,6 +51,9 @@ roomRoute.post("/:id/update", zValidator("form", updateRoomSchema), async (c) =>
   const data = c.req.valid("form");
 
   // Ownership check omitted for brevity, but should be here similar to GET above
+  if (data.baseRentAmount !== undefined && !Number.isNaN(data.baseRentAmount)) {
+    data.baseRentAmount = currencyConvertor(data.baseRentAmount.toString());
+  }
 
   await db.update(room).set(data).where(eq(room.id, id));
 

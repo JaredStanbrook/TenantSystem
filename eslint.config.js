@@ -22,9 +22,9 @@ export default tseslint.config(
     },
 
     rules: {
-      "no-console": ["warn", { allow: ["warn", "error"] }],
+      "no-console": ["warn", { allow: ["log", "warn", "error"] }],
 
       "@typescript-eslint/strict-boolean-expressions": "off",
     },
-  }
+  },
 );

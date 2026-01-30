@@ -3,7 +3,7 @@ import { html } from "hono/html";
 import { type Tenancy, TENANCY_STATUS_VALUES } from "@server/schema/tenancy.schema";
 import { VALID_TRANSITIONS } from "@server/services/tenancy.service";
 import { Property } from "../../schema/property.schema";
-import { SafeUser } from "../../schema/auth.schema";
+import { UserSummary } from "../../schema/auth.schema";
 import { SafeRoom } from "../../schema/room.schema";
 import { capitalize, StatusBadge } from "../lib/utils";
 
@@ -20,14 +20,14 @@ const styles: Record<string, string> = {
 
 // Joined Data Type
 type TenancyView = Tenancy & {
-  user: SafeUser;
+  user: UserSummary;
   property: Property;
   room?: SafeRoom | null; // Added Room
 };
 
 // --- 1. Tenancy Row ---
 export const TenancyRow = ({ t }: { t: TenancyView }) => html`
-  <tr class="hover:bg-muted/50 transition-colors border-b group" id="row-${t.id}">
+  <tr class="hover:bg-muted/50 transition-colors border-b group" id="tenancy-row-${t.id}">
     <td class="p-4 align-middle">
       <div class="flex items-center gap-3">
         <div
@@ -67,15 +67,25 @@ export const TenancyRow = ({ t }: { t: TenancyView }) => html`
       </div>
     </td>
     <td class="p-4 align-middle">${StatusBadge(t.status, styles)}</td>
+
     <td class="p-4 align-middle text-right">
-      <button
-        hx-get="/admin/tenancies/${t.id}/edit"
-        hx-target="#main-content"
-        hx-push-url="true"
-        class="inline-flex items-center justify-center rounded-md text-sm font-medium border border-input bg-background hover:bg-accent h-8 w-8 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
-        aria-label="Edit tenancy">
-        <i data-lucide="pencil" class="w-4 h-4"></i>
-      </button>
+      <div class="flex justify-end gap-2">
+        <button
+          hx-get="/admin/tenancies/${t.id}/edit"
+          hx-push-url="true"
+          hx-target="#main-content"
+          class="inline-flex items-center justify-center rounded-lg text-sm font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground h-8 w-8">
+          <i data-lucide="pencil" class="w-4 h-4"></i>
+        </button>
+        <button
+          hx-delete="/admin/tenancies/${t.id}"
+          hx-target="#tenancy-row-${t.id}"
+          hx-swap="outerHTML swap:0.5s"
+          hx-confirm="Delete this tenancy?"
+          class="inline-flex items-center justify-center rounded-lg text-sm font-medium border border-input bg-background hover:bg-destructive hover:text-destructive-foreground h-8 w-8">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+        </button>
+      </div>
     </td>
   </tr>
 `;
@@ -135,7 +145,7 @@ export const TenancyTable = ({
               <th class="h-12 px-4 align-middle font-medium text-muted-foreground">Timeline</th>
               <th class="h-12 px-4 align-middle font-medium text-muted-foreground">Status</th>
               <th class="h-12 px-4 align-middle font-medium text-muted-foreground text-right">
-                Edit
+                Actions
               </th>
             </tr>
           </thead>
@@ -165,14 +175,14 @@ export const TenancyTable = ({
 // --- 3. Tenancy Form (Enhanced) ---
 export const TenancyForm = ({
   tenancy,
-  properties,
+  properties = [],
   rooms = [],
   action,
   emailValue = "",
   errors = {},
 }: {
   tenancy?: Partial<Tenancy>;
-  properties: Property[];
+  properties?: Property[];
   rooms?: SafeRoom[];
   action: string;
   emailValue?: string;
@@ -194,148 +204,173 @@ export const TenancyForm = ({
         hx-get="/admin/tenancies"
         hx-push-url="true"
         hx-target="#main-content"
+        hx-push-url="true"
         class="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 px-2 py-1 rounded-md hover:bg-muted transition-colors">
         <i data-lucide="arrow-left" class="w-4 h-4"></i> Back
       </button>
     </div>
-
-    <form
-      hx-post="${action}"
-      hx-target="#main-content"
-      class="space-y-6 border rounded-xl p-6 bg-card shadow-sm">
-      <div class="space-y-4">
-        <h3 class="text-sm font-semibold text-foreground flex items-center gap-2">
-          <i data-lucide="user" class="w-4 h-4"></i> Tenancy Details
-        </h3>
-        <div class="space-y-2">
-          <label class="text-sm font-medium leading-none"
-            >Email Address <span class="text-destructive">*</span></label
-          >
-          <div class="relative">
-            <i data-lucide="mail" class="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground"></i>
-            <input
-              type="email"
-              name="email"
-              value="${emailValue}"
-              ${tenancy?.id ? "disabled" : "required"}
-              placeholder="applicant@example.com"
-              class="flex h-10 w-full pl-9 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 disabled:bg-muted/50" />
-          </div>
-          ${errors.email
-            ? html`<p class="text-destructive text-xs font-medium">${errors.email[0]}</p>`
-            : ""}
-        </div>
-      </div>
-
-      <hr class="border-border/50" />
-
-      <div class="space-y-4">
-        <h3 class="text-sm font-semibold text-foreground flex items-center gap-2">
-          <i data-lucide="map-pin" class="w-4 h-4"></i> Property & Room
-        </h3>
-
-        <div class="grid sm:grid-cols-2 gap-4">
+    <div class="space-y-6 border rounded-xl p-6 bg-card shadow-sm">
+      <form hx-post="${action}" hx-target="#main-content" class="space-y-6">
+        <div class="space-y-4">
+          <h3 class="text-sm font-semibold text-foreground flex items-center gap-2">
+            <i data-lucide="user" class="w-4 h-4"></i> Tenancy Details
+          </h3>
           <div class="space-y-2">
             <label class="text-sm font-medium leading-none"
-              >Property <span class="text-destructive">*</span></label
+              >Email Address <span class="text-destructive">*</span></label
             >
-            <select
-              name="propertyId"
-              required
-              hx-get="/admin/tenancies/rooms-select"
-              hx-target="#room-select"
-              hx-trigger="change"
-              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring">
-              ${properties.map(
-                (p) => html`
-                  <option value="${p.id}" ${tenancy?.propertyId === p.id ? "selected" : ""}>
-                    ${p.nickname || p.addressLine1}
-                  </option>
-                `
-              )}
-            </select>
-          </div>
-
-          <div class="space-y-2">
-            <label class="text-sm font-medium leading-none flex justify-between">
-              Room Assignment
-              <span class="text-xs text-muted-foreground font-normal">Optional</span>
-            </label>
-            <select
-              id="room-select"
-              name="roomId"
-              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring">
-              <option value="">Select a Room...</option>
-              ${rooms.map(
-                (r) => html`
-                  <option value="${r.id}" ${tenancy?.roomId === r.id ? "selected" : ""}>
-                    ${r.name} (${r.status ? r.status.replace("_", " ") : "Unknown"})
-                  </option>
-                `
-              )}
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <hr class="border-border/50" />
-
-      <div class="space-y-4">
-        <h3 class="text-sm font-semibold text-foreground flex items-center gap-2">
-          <i data-lucide="file-text" class="w-4 h-4"></i> Lease Details
-        </h3>
-
-        <div class="grid grid-cols-2 gap-4">
-          <div class="space-y-2">
-            <label class="text-sm font-medium leading-none"
-              >Start Date <span class="text-destructive">*</span></label
-            >
-            <input
-              type="date"
-              name="startDate"
-              value="${tenancy?.startDate
-                ? new Date(tenancy.startDate).toISOString().split("T")[0]
-                : ""}"
-              required
-              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring" />
-          </div>
-
-          <div class="space-y-2">
-            <label class="text-sm font-medium leading-none flex justify-between">
-              End Date
-              <span class="text-xs text-muted-foreground font-normal">Optional</span>
-            </label>
-            <input
-              type="date"
-              name="endDate"
-              value="${tenancy?.endDate
-                ? new Date(tenancy.endDate).toISOString().split("T")[0]
-                : ""}"
-              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring" />
+            <div class="relative">
+              <i
+                data-lucide="mail"
+                class="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground"></i>
+              <input
+                type="email"
+                name="email"
+                value="${emailValue}"
+                ${tenancy?.id ? "disabled" : "required"}
+                placeholder="applicant@example.com"
+                class="flex h-10 w-full pl-9 rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 disabled:bg-muted/50" />
+            </div>
+            ${errors.email
+              ? html`<p class="text-destructive text-xs font-medium">${errors.email[0]}</p>`
+              : ""}
           </div>
         </div>
 
-        <div class="space-y-2">
-          <label class="text-sm font-medium leading-none">Bond Amount</label>
-          <div class="relative">
-            <span class="absolute left-3 top-2.5 text-sm text-muted-foreground">$</span>
-            <input
-              type="number"
-              name="bondAmount"
-              placeholder="0.00"
-              value="${tenancy?.bondAmount || ""}"
-              class="flex h-10 w-full pl-7 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring" />
+        <hr class="border-border/50" />
+
+        <div class="space-y-4">
+          <h3 class="text-sm font-semibold text-foreground flex items-center gap-2">
+            <i data-lucide="map-pin" class="w-4 h-4"></i> Property & Room
+          </h3>
+
+          <div class="grid sm:grid-cols-2 gap-4">
+            <div class="space-y-2">
+              <label class="text-sm font-medium leading-none"
+                >Property <span class="text-destructive">*</span></label
+              >
+              <select
+                name="propertyId"
+                required
+                hx-get="/admin/tenancies/rooms-select"
+                hx-target="#room-select"
+                hx-trigger="change"
+                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <option value="">Select a Property...</option>
+                ${properties.map(
+                  (p) => html`
+                    <option value="${p.id}" ${tenancy?.propertyId === p.id ? "selected" : ""}>
+                      ${p.nickname || p.addressLine1}
+                    </option>
+                  `,
+                )}
+              </select>
+            </div>
+
+            <div class="space-y-2">
+              <label class="text-sm font-medium leading-none flex justify-between">
+                Room Assignment
+                <span class="text-xs text-muted-foreground font-normal">Optional</span>
+              </label>
+              <select
+                id="room-select"
+                name="roomId"
+                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <option value="">Select a Room...</option>
+                ${rooms.map(
+                  (r) => html`
+                    <option value="${r.id}" ${tenancy?.roomId === r.id ? "selected" : ""}>
+                      ${r.name} (${r.status ? r.status.replace("_", " ") : "Unknown"})
+                    </option>
+                  `,
+                )}
+              </select>
+            </div>
           </div>
         </div>
-      </div>
-      <div class="flex justify-end pt-2">
-        <button
-          type="submit"
-          class="inline-flex items-center justify-center rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-8 py-2 shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]">
-          <i data-lucide="${tenancy?.id ? "save" : "user-plus"}" class="mr-2 h-4 w-4"></i>
-          ${tenancy?.id ? "Save Changes" : "Create Tenancy"}
-        </button>
-      </div>
+
+        <hr class="border-border/50" />
+
+        <div class="space-y-4">
+          <h3 class="text-sm font-semibold text-foreground flex items-center gap-2">
+            <i data-lucide="file-text" class="w-4 h-4"></i> Lease Details
+          </h3>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div class="space-y-2">
+              <label class="text-sm font-medium leading-none"
+                >Start Date <span class="text-destructive">*</span></label
+              >
+              <input
+                type="date"
+                name="startDate"
+                value="${tenancy?.startDate
+                  ? new Date(tenancy.startDate).toISOString().split("T")[0]
+                  : ""}"
+                required
+                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+            </div>
+
+            <div class="space-y-2">
+              <label class="text-sm font-medium leading-none flex justify-between">
+                End Date
+                <span class="text-xs text-muted-foreground font-normal">Optional</span>
+              </label>
+              <input
+                type="date"
+                name="endDate"
+                value="${tenancy?.endDate
+                  ? new Date(tenancy.endDate).toISOString().split("T")[0]
+                  : ""}"
+                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <label class="text-sm font-medium leading-none">Bond Amount</label>
+            <div class="relative">
+              <span class="absolute left-3 top-2.5 text-sm text-muted-foreground">$</span>
+              <input
+                type="number"
+                name="bondAmount"
+                placeholder="0.00"
+                step="0.01"
+                value="${tenancy?.bondAmount ? (tenancy.bondAmount / 100).toFixed(2) : ""}"
+                class="flex h-10 w-full pl-7 rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+            </div>
+          </div>
+        </div>
+        ${tenancy?.id
+          ? html`
+              <hr class="border-border/50" />
+              <div class="space-y-4">
+                <h3 class="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <i data-lucide="calendar-check" class="w-4 h-4"></i> Billing
+                </h3>
+                <div class="grid grid-cols-2 gap-4">
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium leading-none">Billed Through Date</label>
+                    <input
+                      type="date"
+                      name="billedThroughDate"
+                      value="${tenancy?.billedThroughDate
+                        ? new Date(tenancy.billedThroughDate).toISOString().split("T")[0]
+                        : ""}"
+                      class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                  </div>
+                </div>
+              </div>
+            `
+          : ""}
+        <div class="flex justify-end pt-2">
+          <button
+            type="submit"
+            class="inline-flex items-center justify-center rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-8 py-2 shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]">
+            <i data-lucide="${tenancy?.id ? "save" : "user-plus"}" class="mr-2 h-4 w-4"></i>
+            ${tenancy?.id ? "Save Changes" : "Create Tenancy"}
+          </button>
+        </div>
+      </form>
       ${tenancy?.id
         ? html`
             ${TenancyStatusManager({
@@ -344,7 +379,7 @@ export const TenancyForm = ({
             })}
           `
         : ""}
-    </form>
+    </div>
   </div>
 `;
 
@@ -355,7 +390,7 @@ export const TenancyStatusManager = ({
   tenancy: Tenancy;
   helperText?: string;
 }) => {
-  const status = tenancy.status || "pending";
+  const status = tenancy.status || "pending_agreement";
 
   return html`
     <div
@@ -372,12 +407,12 @@ export const TenancyStatusManager = ({
         <form hx-patch="/admin/tenancies/${tenancy.id}/status">
           <select
             name="status"
-            class="h-8 w-full text-xs rounded-md border border-input bg-background px-3 py-1 shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            class="h-8 w-full text-xs rounded-lg border border-input bg-background px-3 py-1 shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             onchange="this.form.requestSubmit()">
             <option value="${status}" selected disabled>Change Status...</option>
             ${TENANCY_STATUS_VALUES.map(
               (s) =>
-                html`<option value="${s}">Move to: ${capitalize(s.replace(/_/g, " "))}</option>`
+                html`<option value="${s}">Move to: ${capitalize(s.replace(/_/g, " "))}</option>`,
             )}
           </select>
 
