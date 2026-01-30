@@ -7,6 +7,7 @@ import { users } from "./auth.schema";
 import { invoice } from "./invoice.schema";
 
 export const PAYMENT_STATUS_VALUES = ["pending", "partial", "paid", "overdue", "void"] as const;
+export const EXTENSION_STATUS_VALUES = ["none", "pending", "approved", "rejected"] as const;
 
 export const invoicePayment = sqliteTable("invoice_payment", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -33,7 +34,7 @@ export const invoicePayment = sqliteTable("invoice_payment", {
 
   // Extensions
   extensionStatus: text("extension_status", {
-    enum: ["none", "pending", "approved", "rejected"],
+    enum: EXTENSION_STATUS_VALUES,
   })
     .default("none")
     .notNull(),
@@ -67,3 +68,5 @@ export const extensionRequestSchema = z.object({
   reason: z.string().optional(),
 });
 export type InvoicePayment = z.infer<typeof selectInvoicePaymentSchema>;
+export type PaymentStatus = (typeof PAYMENT_STATUS_VALUES)[number];
+export type ExtensionStatus = (typeof EXTENSION_STATUS_VALUES)[number];

@@ -10,8 +10,17 @@ import {
 } from "date-fns";
 
 import { eq, and, sql, ne } from "drizzle-orm";
-import { invoice, INVOICE_STATUSES, InvoiceStatus, InvoiceType } from "../schema/invoice.schema";
-import { invoicePayment } from "../schema/invoicePayment.schema";
+import {
+  invoice,
+  INVOICE_STATUSES,
+  InvoiceStatus,
+  InvoiceType,
+} from "../schema/invoice.schema";
+import {
+  invoicePayment,
+  PaymentStatus,
+  ExtensionStatus,
+} from "../schema/invoicePayment.schema";
 import { property } from "../schema/property.schema";
 import { room } from "../schema/room.schema";
 import { users } from "../schema/auth.schema";
@@ -24,8 +33,8 @@ type DrizzleDB = AppEnv["Variables"]["db"];
 export interface CreateInvoiceWithPaymentParams {
   invoiceData: {
     propertyId: number;
-    type: string;
-    description: string;
+    type: InvoiceType;
+    description?: string;
     totalAmount: number;
     dueDate: Date | number;
     status: InvoiceStatus;
@@ -34,7 +43,9 @@ export interface CreateInvoiceWithPaymentParams {
   payments: Array<{
     userId: string;
     amountOwed: number;
-    status: InvoiceStatus;
+    status?: PaymentStatus;
+    dueDateExtensionDays?: number;
+    extensionStatus?: ExtensionStatus;
   }>;
 }
 
@@ -54,7 +65,7 @@ export interface RentInvoiceParams {
     start: Date;
     end: Date;
     amountCents: number;
-    idempotencyKey: string;
+    idempotencyKey?: string;
   };
   roomName?: string;
 }
@@ -63,8 +74,14 @@ export const InvoiceService = {
   /**
    * Enforces the Accounting Invariant: Sum(splits) === Total Amount
    */
-  validateIntegrity(totalAmountCents: number, splits: { amountOwed: number }[]) {
-    const sumSplits = splits.reduce((acc, s) => acc + s.amountOwed, 0);
+  validateIntegrity(
+    totalAmountCents: number,
+    splits: { amountOwed?: number; amountCents?: number }[],
+  ) {
+    const sumSplits = splits.reduce(
+      (acc, s) => acc + (s.amountOwed ?? s.amountCents ?? 0),
+      0,
+    );
 
     if (sumSplits !== totalAmountCents) {
       throw new Error(
@@ -115,7 +132,10 @@ export const InvoiceService = {
             : new Date(inv.invoiceData.dueDate),
       }));
 
-      const createdInvoices = await db.insert(invoice).values(invoiceValues).returning();
+      const createdInvoices = await db
+        .insert(invoice)
+        .values(invoiceValues)
+        .returning();
       createdInvoiceIds.push(...createdInvoices.map((inv) => inv.id));
 
       const allPayments = invoices.flatMap((inv, index) =>
@@ -123,7 +143,9 @@ export const InvoiceService = {
           invoiceId: createdInvoices[index].id,
           userId: payment.userId,
           amountOwed: payment.amountOwed,
-          status: (payment.status || "pending") as InvoiceStatus,
+          status: (payment.status || "pending") as PaymentStatus,
+          dueDateExtensionDays: payment.dueDateExtensionDays ?? 0,
+          extensionStatus: payment.extensionStatus ?? "none",
         })),
       );
 
@@ -139,7 +161,10 @@ export const InvoiceService = {
       console.error("Failed to create invoices/payments:", error);
       await cleanupInvoices();
 
-      if (error.message?.includes("UNIQUE constraint") || error.message?.includes("idempotency")) {
+      if (
+        error.message?.includes("UNIQUE constraint") ||
+        error.message?.includes("idempotency")
+      ) {
         return {
           invoiceIds: [],
           success: false,
@@ -173,7 +198,7 @@ export const InvoiceService = {
           {
             userId: params.userId,
             amountOwed: params.bondAmount,
-            status: "pending" as InvoiceStatus,
+            status: "pending",
           },
         ],
       },
@@ -200,7 +225,9 @@ export const InvoiceService = {
           totalAmount: params.rentAction.amountCents,
           dueDate: params.rentAction.start,
           status: "open",
-          idempotencyKey: params.rentAction.idempotencyKey,
+          idempotencyKey:
+            params.rentAction.idempotencyKey ||
+            `rent-${params.tenancyId}-${params.rentAction.end.toISOString().split("T")[0]}`,
         },
         payments: [
           {
@@ -222,7 +249,10 @@ export const InvoiceService = {
       .from(invoicePayment)
       .where(eq(invoicePayment.invoiceId, invoiceId));
 
-    const [inv] = await db.select().from(invoice).where(eq(invoice.id, invoiceId));
+    const [inv] = await db
+      .select()
+      .from(invoice)
+      .where(eq(invoice.id, invoiceId));
     if (!inv) return;
 
     const totalAmount = inv.totalAmount;
@@ -247,7 +277,10 @@ export const InvoiceService = {
     }
 
     if (inv.status !== newStatus) {
-      await db.update(invoice).set({ status: newStatus }).where(eq(invoice.id, invoiceId));
+      await db
+        .update(invoice)
+        .set({ status: newStatus })
+        .where(eq(invoice.id, invoiceId));
     }
   },
 
@@ -291,14 +324,26 @@ export const InvoiceService = {
     };
 
     // Get property with nextBillingDate
-    const [prop] = await db.select().from(property).where(eq(property.id, propertyId));
+    const [prop] = await db
+      .select()
+      .from(property)
+      .where(eq(property.id, propertyId));
     if (!prop) {
       results.errors.push("Property not found");
       return results;
     }
 
-    console.log("Property:", prop.nickname, "Next billing:", prop.nextBillingDate);
+    console.log(
+      "Property:",
+      prop.nickname,
+      "Next billing:",
+      prop.nextBillingDate,
+    );
 
+    if (!prop.nextBillingDate) {
+      results.errors.push("Property nextBillingDate is not set");
+      return results;
+    }
     const nextBillingDate = startOfDay(prop.nextBillingDate);
     const today = startOfDay(new Date());
 
@@ -336,9 +381,13 @@ export const InvoiceService = {
           idempotencyKey: invoice.idempotencyKey,
         })
         .from(invoice)
-        .where(and(eq(invoice.propertyId, propertyId), eq(invoice.type, "rent")));
+        .where(
+          and(eq(invoice.propertyId, propertyId), eq(invoice.type, "rent")),
+        );
 
-      const existingKeys = new Set(existingInvoices.map((inv) => inv.idempotencyKey));
+      const existingKeys = new Set(
+        existingInvoices.map((inv) => inv.idempotencyKey),
+      );
       console.log(`Found ${existingKeys.size} existing invoices`);
 
       // Calculate all billing cycles working BACKWARDS from nextBillingDate
@@ -352,21 +401,29 @@ export const InvoiceService = {
       let cycleCount = 0;
 
       // Work backwards to build all billing cycles
-      // Stop when we go before the earliest tenancy move-in date
-      const earliestMoveIn = tenancies.reduce(
+      // Stop when we go before the earliest billable date across tenancies
+      const earliestBillable = tenancies.reduce(
         (earliest, t) => {
-          const moveIn = startOfDay(t.tenancy.startDate);
-          return !earliest || isBefore(moveIn, earliest) ? moveIn : earliest;
+          const startDate = startOfDay(t.tenancy.startDate);
+          const billedThrough = startOfDay(t.tenancy.billedThroughDate);
+          const billableFrom = isAfter(billedThrough, startDate)
+            ? billedThrough
+            : startDate;
+          return !earliest || isBefore(billableFrom, earliest)
+            ? billableFrom
+            : earliest;
         },
         null as Date | null,
       );
-
-      if (!earliestMoveIn) {
-        results.errors.push("No valid move-in dates found");
+      if (!earliestBillable) {
+        results.errors.push("No valid billable dates found");
         return results;
       }
 
-      console.log("Earliest move-in date:", format(earliestMoveIn, "dd/MM/yyyy"));
+      console.log(
+        "Earliest billable date:",
+        format(earliestBillable, "dd/MM/yyyy"),
+      );
 
       while (cycleCount < maxCycles) {
         let cycleStart: Date;
@@ -380,11 +437,16 @@ export const InvoiceService = {
           cycleStart = addMonths(currentEnd, -1);
         }
 
-        // Stop if this cycle starts before the earliest move-in date
-        if (isBefore(cycleStart, earliestMoveIn)) {
+        // If this cycle starts before the earliest billable date, include it once
+        // to capture partial-cycle charges, then stop.
+        if (isBefore(cycleStart, earliestBillable)) {
           console.log(
-            `Cycle starts before earliest move-in, stopping at ${format(cycleStart, "dd/MM/yyyy")}`,
+            `Cycle starts before earliest billable date, adding partial cycle ending ${format(currentEnd, "dd/MM/yyyy")}`,
           );
+          billingCycles.unshift({
+            startDate: cycleStart,
+            endDate: currentEnd,
+          });
           break;
         }
 
@@ -408,33 +470,36 @@ export const InvoiceService = {
           `Processing cycle: ${format(cycle.startDate, "dd/MM/yyyy")} -> ${format(cycle.endDate, "dd/MM/yyyy")}`,
         );
 
-        // Check if invoice already exists
-        if (existingKeys.has(idempotencyKey)) {
-          console.log(`  Invoice already exists: ${idempotencyKey}`);
-          results.skipped++;
-          continue;
-        }
-
         // Build payments for tenancies that need billing for this cycle
         const payments: Array<{
           userId: string;
           amountOwed: number;
-          status: InvoiceStatus;
-          tenancyId: number;
+          status: PaymentStatus;
         }> = [];
 
         let totalAmount = 0;
-        let earliestTenancyStart: Date | null = null;
-
         for (const record of tenancies) {
           if (!record.room || !record.user) continue;
 
-          const moveInDate = startOfDay(record.tenancy.moveInDate);
+          const startDate = startOfDay(record.tenancy.startDate);
           const billedThrough = startOfDay(record.tenancy.billedThroughDate);
+          const endDate = record.tenancy.endDate
+            ? startOfDay(record.tenancy.endDate)
+            : null;
 
-          // Skip if tenancy hasn't moved in yet by end of this cycle
-          if (isAfter(moveInDate, cycle.endDate)) {
-            console.log(`  Tenancy ${record.tenancy.id} hasn't moved in yet`);
+          // Skip if tenancy starts after the cycle ends
+          if (!isBefore(startDate, cycle.endDate)) {
+            console.log(
+              `  Tenancy ${record.tenancy.id} starts after cycle end`,
+            );
+            continue;
+          }
+
+          // Skip if tenancy ended before or on cycle start
+          if (endDate && !isAfter(endDate, cycle.startDate)) {
+            console.log(
+              `  Tenancy ${record.tenancy.id} ended before cycle start`,
+            );
             continue;
           }
 
@@ -447,18 +512,12 @@ export const InvoiceService = {
           }
 
           // Determine the actual billing period for this tenancy
-          // It starts at the LATER of: cycle start or their last billedThroughDate
-          let tenancyPeriodStart: Date;
-
-          if (isBefore(billedThrough, cycle.startDate)) {
-            // They're behind - bill from cycle start (or move-in if later)
-            tenancyPeriodStart = isAfter(moveInDate, cycle.startDate)
-              ? moveInDate
-              : cycle.startDate;
-          } else {
-            // They're partially billed - bill from where they left off
+          // Starts at the LATER of: cycle start, tenancy start, or billedThroughDate
+          let tenancyPeriodStart = cycle.startDate;
+          if (isAfter(startDate, tenancyPeriodStart))
+            tenancyPeriodStart = startDate;
+          if (isAfter(billedThrough, tenancyPeriodStart))
             tenancyPeriodStart = billedThrough;
-          }
 
           // If tenancy starts after cycle ends, skip
           if (!isBefore(tenancyPeriodStart, cycle.endDate)) {
@@ -468,10 +527,16 @@ export const InvoiceService = {
             continue;
           }
 
-          const daysInPeriod = differenceInDays(cycle.endDate, tenancyPeriodStart);
+          const periodEnd =
+            endDate && isBefore(endDate, cycle.endDate)
+              ? endDate
+              : cycle.endDate;
+          const daysInPeriod = differenceInDays(periodEnd, tenancyPeriodStart);
 
           if (daysInPeriod <= 0) {
-            console.log(`  Tenancy ${record.tenancy.id} has no days in this period`);
+            console.log(
+              `  Tenancy ${record.tenancy.id} has no days in this period`,
+            );
             continue;
           }
 
@@ -479,31 +544,18 @@ export const InvoiceService = {
             `  Tenancy ${record.tenancy.id}: ${format(tenancyPeriodStart, "dd/MM/yyyy")} -> ${format(cycle.endDate, "dd/MM/yyyy")} (${daysInPeriod} days)`,
           );
 
-          // Calculate prorated amount
-          let amountCents = 0;
-
-          if (prop.rentFrequency === "monthly") {
-            if (daysInPeriod >= 28 && daysInPeriod <= 31) {
-              amountCents = record.room.baseRentAmount;
-            } else {
-              const dailyRate = Math.floor((record.room.baseRentAmount * 12) / 365);
-              amountCents = dailyRate * daysInPeriod;
-            }
-          } else {
-            const weeklyRate =
-              prop.rentFrequency === "weekly"
-                ? record.room.baseRentAmount
-                : record.room.baseRentAmount / 2;
-            const dailyRate = Math.floor((weeklyRate * 52) / 365);
-
-            if (daysInPeriod === 7 && prop.rentFrequency === "weekly") {
-              amountCents = record.room.baseRentAmount;
-            } else if (daysInPeriod === 14 && prop.rentFrequency === "fortnightly") {
-              amountCents = record.room.baseRentAmount;
-            } else {
-              amountCents = dailyRate * daysInPeriod;
-            }
+          // Calculate prorated amount based on cycle length
+          const cycleDays = differenceInDays(cycle.endDate, cycle.startDate);
+          if (cycleDays <= 0) {
+            console.log(
+              `  Cycle has no days, skipping tenancy ${record.tenancy.id}`,
+            );
+            continue;
           }
+
+          const amountCents = Math.round(
+            (record.room.baseRentAmount * daysInPeriod) / cycleDays,
+          );
 
           console.log(
             `  Amount for tenancy ${record.tenancy.id}: $${(amountCents / 100).toFixed(2)}`,
@@ -513,19 +565,86 @@ export const InvoiceService = {
             userId: record.user.id,
             amountOwed: amountCents,
             status: "pending",
-            tenancyId: record.tenancy.id,
           });
 
           totalAmount += amountCents;
-
-          // Track earliest start for invoice due date
-          if (!earliestTenancyStart || isBefore(tenancyPeriodStart, earliestTenancyStart)) {
-            earliestTenancyStart = tenancyPeriodStart;
-          }
         }
 
         if (payments.length === 0) {
           console.log(`  No payments needed for this cycle`);
+          continue;
+        }
+
+        if (existingKeys.has(idempotencyKey)) {
+          console.log(`  Invoice already exists: ${idempotencyKey}`);
+
+          const [existingInvoice] = await db
+            .select({
+              id: invoice.id,
+              totalAmount: invoice.totalAmount,
+              description: invoice.description,
+            })
+            .from(invoice)
+            .where(eq(invoice.idempotencyKey, idempotencyKey));
+
+          if (!existingInvoice) {
+            results.errors.push(
+              `Missing invoice for idempotencyKey ${idempotencyKey}`,
+            );
+            continue;
+          }
+
+          const existingPayments = await db
+            .select({ userId: invoicePayment.userId })
+            .from(invoicePayment)
+            .where(eq(invoicePayment.invoiceId, existingInvoice.id));
+
+          const existingUserIds = new Set(
+            existingPayments.map((p) => p.userId),
+          );
+          const missingPayments = payments.filter(
+            (p) => !existingUserIds.has(p.userId),
+          );
+
+          if (missingPayments.length === 0) {
+            results.skipped++;
+            continue;
+          }
+
+          const missingTotal = missingPayments.reduce(
+            (acc, p) => acc + p.amountOwed,
+            0,
+          );
+
+          const auditStamp = `[Backfill ${new Date().toISOString().split("T")[0]}]`;
+          const auditUsers = missingPayments.map((p) => p.userId).join(", ");
+          const auditNote = `${auditStamp} Added tenants: ${auditUsers}`;
+          const nextDescription = existingInvoice.description
+            ? `${existingInvoice.description}\n${auditNote}`
+            : auditNote;
+
+          await db.batch([
+            db.insert(invoicePayment).values(
+              missingPayments.map((p) => ({
+                invoiceId: existingInvoice.id,
+                userId: p.userId,
+                amountOwed: p.amountOwed,
+                status: p.status,
+                dueDateExtensionDays: 0,
+                extensionStatus: "none" as ExtensionStatus,
+                adminNote: auditNote,
+              })),
+            ),
+            db
+              .update(invoice)
+              .set({
+                totalAmount: existingInvoice.totalAmount + missingTotal,
+              })
+              .where(eq(invoice.id, existingInvoice.id)),
+          ]);
+
+          await this.reconcileStatus(db, existingInvoice.id);
+          results.generated++;
           continue;
         }
 
@@ -541,7 +660,7 @@ export const InvoiceService = {
               type: "rent",
               description: `Rent - ${prop.nickname || "Property"} (${format(cycle.startDate, "dd/MM/yyyy")} - ${format(cycle.endDate, "dd/MM/yyyy")})`,
               totalAmount: totalAmount,
-              dueDate: earliestTenancyStart || cycle.startDate,
+              dueDate: cycle.endDate,
               status: "open",
               idempotencyKey,
             },
@@ -555,17 +674,6 @@ export const InvoiceService = {
 
         if (result.success) {
           console.log(`  Successfully created invoice`);
-
-          // Update billedThroughDate for all tenancies that were billed
-          for (const payment of payments) {
-            await db
-              .update(tenancy)
-              .set({
-                billedThroughDate: cycle.endDate,
-                updatedAt: new Date(),
-              })
-              .where(eq(tenancy.id, payment.tenancyId));
-          }
 
           results.generated++;
           existingKeys.add(idempotencyKey);
@@ -582,12 +690,19 @@ export const InvoiceService = {
       }
     } catch (error: any) {
       console.error("Error in generateRentInvoicesForProperty:", error);
-      results.errors.push(`Error processing property ${propertyId}: ${error.message}`);
+      results.errors.push(
+        `Error processing property ${propertyId}: ${error.message}`,
+      );
     }
 
     // Only advance nextBillingDate if we've reached or passed it
     if (!isBefore(today, nextBillingDate)) {
-      await this.advanceNextBillingDate(db, propertyId, nextBillingDate, prop.rentFrequency);
+      await this.advanceNextBillingDate(
+        db,
+        propertyId,
+        nextBillingDate,
+        prop.rentFrequency,
+      );
     }
 
     return results;
@@ -634,7 +749,8 @@ export const InvoiceService = {
         amountCents = dailyRate * daysInPeriod;
       }
     } else {
-      const weeklyRate = frequency === "weekly" ? roomRentAmount : roomRentAmount / 2;
+      const weeklyRate =
+        frequency === "weekly" ? roomRentAmount : roomRentAmount / 2;
       const dailyRate = Math.floor((weeklyRate * 52) / 365);
 
       if (daysInPeriod === 7 && frequency === "weekly") {
@@ -692,21 +808,37 @@ export const InvoiceService = {
    * Legacy single-tenancy rent run (kept for backwards compatibility)
    */
   async processRentRun(db: DrizzleDB, tenancyId: number) {
-    const data = await db.query.tenancy.findFirst({
-      where: eq(tenancy.id, tenancyId),
-      with: {
-        property: true,
-        room: true,
-        user: true,
-      },
-    });
+    const [record] = await db
+      .select({
+        tenancy: tenancy,
+        property: property,
+        room: room,
+        user: users,
+      })
+      .from(tenancy)
+      .innerJoin(property, eq(tenancy.propertyId, property.id))
+      .leftJoin(room, eq(tenancy.roomId, room.id))
+      .innerJoin(users, eq(tenancy.userId, users.id))
+      .where(eq(tenancy.id, tenancyId));
 
-    if (!data) throw new Error("Tenancy not found");
-    if (!data.property) throw new Error("Property not found");
-    if (!data.room) throw new Error("Room not found");
-    if (!data.user) throw new Error("User not found");
+    if (!record) throw new Error("Tenancy not found");
+    if (!record.property) throw new Error("Property not found");
+    if (!record.room) throw new Error("Room not found");
+    if (!record.user) throw new Error("User not found");
 
-    const nextBillingDate = startOfDay(data.property.nextBillingDate);
+    const propertyNextBillingDate = record.property.nextBillingDate;
+    if (!propertyNextBillingDate) {
+      throw new Error("Property nextBillingDate is not set");
+    }
+
+    const data = {
+      ...record.tenancy,
+      property: record.property,
+      room: record.room,
+      user: record.user,
+    };
+
+    const nextBillingDate = startOfDay(propertyNextBillingDate);
     const billedThrough = startOfDay(data.billedThroughDate);
 
     // Only generate if we haven't reached nextBillingDate yet
@@ -721,7 +853,7 @@ export const InvoiceService = {
       data.property.rentFrequency,
       billedThrough,
       nextBillingDate,
-      data.room.rentAmount,
+      data.room.baseRentAmount,
     );
 
     if (!rentAction) return;
@@ -762,14 +894,21 @@ export const InvoiceService = {
   /**
    * Helper to parse form inputs safely
    */
-  parseSplits(ids: string | string[], amounts: string | string[], extensions: string | string[]) {
-    const idArray = [].concat(ids as any).filter(Boolean);
-    const amountArray = [].concat(amounts as any);
-    const extArray = [].concat(extensions as any);
+  parseSplits(ids: unknown, amounts: unknown, extensions: unknown) {
+    const toStringArray = (value: unknown) =>
+      ([] as unknown[])
+        .concat(value as any)
+        .filter((v) => typeof v === "string") as string[];
+
+    const idArray = toStringArray(ids);
+    const amountArray = toStringArray(amounts);
+    const extArray = toStringArray(extensions);
 
     return idArray.map((userId, i) => ({
       userId: userId as string,
-      amountCents: Math.round(parseFloat((amountArray[i] || "0") as string) * 100),
+      amountCents: Math.round(
+        parseFloat((amountArray[i] || "0") as string) * 100,
+      ),
       extensionDays: parseInt((extArray[i] || "0") as string) || 0,
     }));
   },

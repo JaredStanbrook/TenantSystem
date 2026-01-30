@@ -1,13 +1,25 @@
 // worker/routes/admin/invoice.tsx
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { eq, desc, inArray, and, count, sql } from "drizzle-orm";
+import {
+  eq,
+  desc,
+  inArray,
+  and,
+  count,
+  sql,
+  getTableColumns,
+} from "drizzle-orm";
 import { z } from "zod";
 
 // Domain
-import { invoice, InvoiceWithPayment } from "@server/schema/invoice.schema";
+import { invoice } from "@server/schema/invoice.schema";
 import { room } from "@server/schema/room.schema";
-import { invoicePayment } from "@server/schema/invoicePayment.schema";
+import {
+  invoicePayment,
+  ExtensionStatus,
+  PaymentStatus,
+} from "@server/schema/invoicePayment.schema";
 import { users } from "@server/schema/auth.schema";
 import { property } from "@server/schema/property.schema";
 import { tenancy } from "@server/schema/tenancy.schema";
@@ -15,8 +27,18 @@ import { InvoiceService } from "@server/services/invoice.service";
 import type { AppEnv } from "@server/types";
 
 // UI
-import { InvoiceTable, InvoiceForm, TenantSection } from "@views/invoices/InvoiceComponents";
-import { htmxResponse, htmxToast, htmxRedirect, flashToast } from "@server/lib/htmx-helpers";
+import {
+  InvoiceTable,
+  InvoiceForm,
+  TenantSection,
+} from "@views/invoices/InvoiceComponents";
+import {
+  htmxResponse,
+  htmxToast,
+  htmxRedirect,
+  flashToast,
+} from "@server/lib/htmx-helpers";
+import { buildInvoicePdf } from "@server/lib/pdf/invoice";
 
 export const invoiceRoute = new Hono<AppEnv>();
 
@@ -25,7 +47,15 @@ export const invoiceRoute = new Hono<AppEnv>();
 // Form Input Schema (Loose types from HTML form)
 const formSchema = z.object({
   propertyId: z.coerce.number(),
-  type: z.enum(["rent", "water", "electricity", "gas", "internet", "maintenance", "other"]),
+  type: z.enum([
+    "rent",
+    "water",
+    "electricity",
+    "gas",
+    "internet",
+    "maintenance",
+    "other",
+  ]),
   description: z.string().optional(),
   amountDollars: z.coerce.number().min(0.01, "Amount must be positive"),
   dueDate: z.coerce.date(),
@@ -48,14 +78,21 @@ invoiceRoute.get("/", async (c) => {
   const offset = (page - 1) * pageSize;
 
   // 1. Security: Get Allowed Properties
-  const ownedProperties = await db.select().from(property).where(eq(property.landlordId, user.id));
+  const ownedProperties = await db
+    .select()
+    .from(property)
+    .where(eq(property.landlordId, user.id));
   const ownedIds = ownedProperties.map((p) => p.id);
 
   if (ownedIds.length === 0) {
     return htmxResponse(
       c,
       "Invoices",
-      InvoiceTable({ invoices: [], properties: [], pagination: { page: 1, totalPages: 1 } }),
+      InvoiceTable({
+        invoices: [],
+        properties: [],
+        pagination: { page: 1, totalPages: 1 },
+      }),
     );
   }
 
@@ -110,7 +147,10 @@ invoiceRoute.get("/create", async (c) => {
   const userId = c.var.auth.user!.id;
   const page = c.req.query("page") || "1";
 
-  const myProperties = await db.select().from(property).where(eq(property.landlordId, userId));
+  const myProperties = await db
+    .select()
+    .from(property)
+    .where(eq(property.landlordId, userId));
 
   if (myProperties.length === 0) {
     return c.text("Please create a property first.");
@@ -121,7 +161,6 @@ invoiceRoute.get("/create", async (c) => {
     "Create Invoice",
     InvoiceForm({
       properties: myProperties,
-      tenants: [],
       action: "/admin/invoices",
       page: page,
     }),
@@ -140,7 +179,9 @@ invoiceRoute.post("/", zValidator("form", formSchema), async (c) => {
     const [prop] = await db
       .select()
       .from(property)
-      .where(and(eq(property.id, data.propertyId), eq(property.landlordId, userId)));
+      .where(
+        and(eq(property.id, data.propertyId), eq(property.landlordId, userId)),
+      );
 
     if (!prop) return c.text("Unauthorized", 403);
 
@@ -201,6 +242,74 @@ invoiceRoute.post("/", zValidator("form", formSchema), async (c) => {
   }
 });
 
+// 2b. GET /:id/pdf (Download PDF)
+invoiceRoute.get("/:id/pdf", async (c) => {
+  const db = c.var.db;
+  const id = Number(c.req.param("id"));
+  const userId = c.var.auth.user!.id;
+
+  const [inv] = await db
+    .select({ invoice: invoice, property: property })
+    .from(invoice)
+    .innerJoin(property, eq(invoice.propertyId, property.id))
+    .where(eq(invoice.id, id));
+
+  if (!inv || inv.property.landlordId !== userId)
+    return c.text("Unauthorized", 403);
+
+  const payments = await db
+    .select({
+      ...getTableColumns(invoicePayment),
+      userDisplayName: users.displayName,
+      userEmail: users.email,
+    })
+    .from(invoicePayment)
+    .innerJoin(users, eq(invoicePayment.userId, users.id))
+    .where(eq(invoicePayment.invoiceId, id));
+
+  const propertyLabel =
+    inv.property.nickname ||
+    [
+      inv.property.addressLine1,
+      inv.property.city,
+      inv.property.state,
+      inv.property.postcode,
+    ]
+      .filter(Boolean)
+      .join(", ");
+  const propertyAddress = [
+    inv.property.addressLine1,
+    inv.property.addressLine2,
+    inv.property.city,
+    inv.property.state,
+    inv.property.postcode,
+    inv.property.country,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  const pdfBytes = await buildInvoicePdf({
+    invoiceId: inv.invoice.id,
+    propertyLabel: propertyLabel || "Property",
+    propertyAddress: propertyAddress || "-",
+    invoiceStatus: inv.invoice.status,
+    invoiceType: inv.invoice.type,
+    totalAmount: inv.invoice.totalAmount,
+    dueDate: inv.invoice.dueDate,
+    issuedDate: inv.invoice.issuedDate,
+    createdAt: inv.invoice.createdAt,
+    description: inv.invoice.description || "-",
+    payments,
+  });
+
+  return new Response(pdfBytes, {
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename=\"invoice-${inv.invoice.id}.pdf\"`,
+    },
+  });
+});
+
 // 4. GET /:id/edit
 invoiceRoute.get("/:id/edit", async (c) => {
   const db = c.var.db;
@@ -213,11 +322,12 @@ invoiceRoute.get("/:id/edit", async (c) => {
     .innerJoin(property, eq(invoice.propertyId, property.id))
     .where(eq(invoice.id, id));
 
-  if (!inv || inv.property.landlordId !== userId) return c.text("Unauthorized", 403);
+  if (!inv || inv.property.landlordId !== userId)
+    return c.text("Unauthorized", 403);
 
   const payments = await db
     .select({
-      ...invoicePayment,
+      ...getTableColumns(invoicePayment),
       userDisplayName: users.displayName,
       userEmail: users.email,
     })
@@ -225,19 +335,29 @@ invoiceRoute.get("/:id/edit", async (c) => {
     .innerJoin(users, eq(invoicePayment.userId, users.id))
     .where(eq(invoicePayment.invoiceId, id));
 
-  const myProperties = await db.select().from(property).where(eq(property.landlordId, userId));
-  const totalPaid = payments.reduce((acc, p) => acc + p.amountPaid, 0);
-  console.log(payments);
+  const myProperties = await db
+    .select()
+    .from(property)
+    .where(eq(property.landlordId, userId));
+  const normalizedPayments = payments.map((p) => ({
+    ...p,
+    userDisplayName: p.userDisplayName ?? undefined,
+    userEmail: p.userEmail ?? undefined,
+  }));
+  const totalPaid = normalizedPayments.reduce(
+    (acc, p) => acc + p.amountPaid,
+    0,
+  );
   return htmxResponse(
     c,
     "Manage Invoice",
     InvoiceForm({
       invoice: inv.invoice,
       properties: myProperties,
-      payments: payments,
+      payments: normalizedPayments,
       action: `/admin/invoices/${id}/update`,
       page: c.req.query("page") || "1",
-      isLocked: totalPaid > 0, // Lock financial edits if money collected
+      isLocked: inv.invoice.status === "paid", // Lock financial edits if money collected
     }),
   );
 });
@@ -256,10 +376,14 @@ invoiceRoute.post("/:id/update", zValidator("form", formSchema), async (c) => {
     .innerJoin(property, eq(invoice.propertyId, property.id))
     .where(eq(invoice.id, id));
 
-  if (!existing || existing.property.landlordId !== userId) return c.text("Unauthorized", 403);
+  if (!existing || existing.property.landlordId !== userId)
+    return c.text("Unauthorized", 403);
 
   // A. Check Lock State
-  const payments = await db.select().from(invoicePayment).where(eq(invoicePayment.invoiceId, id));
+  const payments = await db
+    .select()
+    .from(invoicePayment)
+    .where(eq(invoicePayment.invoiceId, id));
   const totalPaid = payments.reduce((acc, p) => acc + p.amountPaid, 0);
   const isLocked = totalPaid > 0;
 
@@ -269,7 +393,8 @@ invoiceRoute.post("/:id/update", zValidator("form", formSchema), async (c) => {
     // If locked, prevent changing amounts
     if (newTotalCents !== existing.invoice.totalAmount) {
       htmxToast(c, "Cannot change amount", {
-        description: "Payments have already been made. Void invoice to restart.",
+        description:
+          "Payments have already been made. Void invoice to restart.",
         type: "error",
       });
       return c.text("Locked", 400);
@@ -298,7 +423,10 @@ invoiceRoute.post("/:id/update", zValidator("form", formSchema), async (c) => {
         splits.map((s) => ({ amountOwed: s.amountCents })),
       );
     } catch (e: any) {
-      htmxToast(c, "Validation Error", { description: e.message, type: "error" });
+      htmxToast(c, "Validation Error", {
+        description: e.message,
+        type: "error",
+      });
       return c.text(e.message, 400);
     }
 
@@ -323,8 +451,10 @@ invoiceRoute.post("/:id/update", zValidator("form", formSchema), async (c) => {
           userId: s.userId,
           amountOwed: s.amountCents,
           dueDateExtensionDays: s.extensionDays,
-          status: "pending",
-          extensionStatus: s.extensionDays > 0 ? "approved" : "none",
+          status: "pending" as PaymentStatus,
+          extensionStatus: (s.extensionDays > 0
+            ? "approved"
+            : "none") as ExtensionStatus,
         })),
       );
     }
@@ -332,7 +462,7 @@ invoiceRoute.post("/:id/update", zValidator("form", formSchema), async (c) => {
 
   await InvoiceService.reconcileStatus(db, id);
   flashToast(c, "Invoice Updated", { type: "success" });
-  return htmxRedirect(c, `/admin/invoices/${id}/edit?page=${data.page}`);
+  return htmxRedirect(c, `/admin/invoices`);
 });
 
 // 8. Dynamic Tenant Loader (HTMX)
@@ -381,8 +511,8 @@ invoiceRoute.get("/fragments/tenant-section", async (c) => {
       userId: t.id,
       amountCents: share,
       extensionDays: 0,
-      userDisplayName: t.displayName,
-      userEmail: t.email,
+      userDisplayName: t.displayName ?? undefined,
+      userEmail: t.email ?? undefined,
     };
   });
 
@@ -403,7 +533,10 @@ invoiceRoute.post("/:id/payment/:paymentId/approve", async (c) => {
 
   try {
     // Verify payment exists and belongs to this invoice
-    const [pay] = await db.select().from(invoicePayment).where(eq(invoicePayment.id, paymentId));
+    const [pay] = await db
+      .select()
+      .from(invoicePayment)
+      .where(eq(invoicePayment.id, paymentId));
 
     if (!pay || pay.invoiceId !== invoiceId) {
       flashToast(c, "Invalid payment", { type: "error" });
@@ -500,7 +633,10 @@ invoiceRoute.post("/tenancy/:id/generate", async (c) => {
 
   try {
     // --- Bond Logic ---
-    if ((strategy === "all" || strategy === "bond_only") && tenRecord.bondAmount) {
+    if (
+      (strategy === "all" || strategy === "bond_only") &&
+      tenRecord.bondAmount
+    ) {
       const result = await InvoiceService.createBondInvoice(db, {
         propertyId: tenRecord.propertyId,
         tenancyId: tenRecord.id,
@@ -579,11 +715,15 @@ invoiceRoute.post("/tenancy/:id/generate", async (c) => {
     if (messages.length > 0) {
       flashToast(c, `Generated: ${messages.join(", ")}`, { type: "success" });
     } else {
-      flashToast(c, "No invoices generated (already up to date?)", { type: "info" });
+      flashToast(c, "No invoices generated (already up to date?)", {
+        type: "info",
+      });
     }
   } catch (error: any) {
     console.error("Invoice generation error:", error);
-    flashToast(c, "Failed to generate invoices: " + error.message, { type: "error" });
+    flashToast(c, "Failed to generate invoices: " + error.message, {
+      type: "error",
+    });
   }
 
   return htmxRedirect(c, `/admin/tenancies`);
@@ -601,10 +741,14 @@ invoiceRoute.delete("/:id", async (c) => {
     .innerJoin(property, eq(invoice.propertyId, property.id))
     .where(eq(invoice.id, id));
 
-  if (!inv || inv.property.landlordId !== userId) return c.text("Unauthorized", 403);
+  if (!inv || inv.property.landlordId !== userId)
+    return c.text("Unauthorized", 403);
 
   // Check for payments
-  const payments = await db.select().from(invoicePayment).where(eq(invoicePayment.invoiceId, id));
+  const payments = await db
+    .select()
+    .from(invoicePayment)
+    .where(eq(invoicePayment.invoiceId, id));
 
   if (payments.some((p) => p.amountPaid > 0)) {
     flashToast(c, "Cannot delete invoice with payments", { type: "error" });
@@ -660,7 +804,8 @@ invoiceRoute.post("/:id/payment/:paymentId/approve-extension", async (c) => {
     const requestedDate = new Date(record.payment.extensionRequestedDate!);
     const originalDueDate = new Date(record.invoice.dueDate);
     const extensionDays = Math.ceil(
-      (requestedDate.getTime() - originalDueDate.getTime()) / (1000 * 60 * 60 * 24),
+      (requestedDate.getTime() - originalDueDate.getTime()) /
+        (1000 * 60 * 60 * 24),
     );
 
     // Update payment with approved extension
@@ -798,7 +943,9 @@ invoiceRoute.post("/:id/payment/:paymentId/grant-extension", async (c) => {
     // Reconcile invoice status (may change from overdue back to open)
     await InvoiceService.reconcileStatus(db, invoiceId);
 
-    flashToast(c, `Extension of ${extensionDays} days granted`, { type: "success" });
+    flashToast(c, `Extension of ${extensionDays} days granted`, {
+      type: "success",
+    });
     return htmxRedirect(c, `/admin/invoices/${invoiceId}/edit`);
   } catch (error: any) {
     console.error("Failed to grant extension:", error);
@@ -877,7 +1024,10 @@ invoiceRoute.post("/generate/:propertyId", async (c) => {
 
   try {
     // Verify property ownership
-    const [prop] = await db.select().from(property).where(eq(property.id, propertyId));
+    const [prop] = await db
+      .select()
+      .from(property)
+      .where(eq(property.id, propertyId));
 
     if (!prop) {
       htmxToast(c, "Property not found", { type: "error" });
@@ -890,7 +1040,10 @@ invoiceRoute.post("/generate/:propertyId", async (c) => {
     }
 
     // Generate all rent invoices for this property
-    const results = await InvoiceService.generateRentInvoicesForProperty(db, propertyId);
+    const results = await InvoiceService.generateRentInvoicesForProperty(
+      db,
+      propertyId,
+    );
 
     // Build success message
     let message = "";
@@ -907,7 +1060,9 @@ invoiceRoute.post("/generate/:propertyId", async (c) => {
 
     // Show errors if any
     if (results.errors.length > 0) {
-      htmxToast(c, `${message}. ${results.errors.length} error(s) occurred`, { type: "warning" });
+      htmxToast(c, `${message}. ${results.errors.length} error(s) occurred`, {
+        type: "warning",
+      });
     } else {
       htmxToast(c, message, { type: "success" });
     }
@@ -931,7 +1086,10 @@ invoiceRoute.post("/generate-all", async (c) => {
 
   try {
     // Get all properties for this landlord
-    const properties = await db.select().from(property).where(eq(property.landlordId, userId));
+    const properties = await db
+      .select()
+      .from(property)
+      .where(eq(property.landlordId, userId));
 
     if (properties.length === 0) {
       htmxToast(c, "No properties found", { type: "info" });
@@ -945,7 +1103,10 @@ invoiceRoute.post("/generate-all", async (c) => {
     // Generate invoices for each property
     for (const prop of properties) {
       try {
-        const results = await InvoiceService.generateRentInvoicesForProperty(db, prop.id);
+        const results = await InvoiceService.generateRentInvoicesForProperty(
+          db,
+          prop.id,
+        );
         totalGenerated += results.generated;
         totalSkipped += results.skipped;
         allErrors.push(...results.errors);
@@ -969,7 +1130,9 @@ invoiceRoute.post("/generate-all", async (c) => {
 
     // Show errors if any
     if (allErrors.length > 0) {
-      htmxToast(c, `${message}. ${allErrors.length} error(s) occurred`, { type: "warning" });
+      htmxToast(c, `${message}. ${allErrors.length} error(s) occurred`, {
+        type: "warning",
+      });
     } else {
       htmxToast(c, message, { type: "success" });
     }

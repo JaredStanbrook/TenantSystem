@@ -3,7 +3,7 @@ import { html } from "hono/html";
 import { getCookie } from "hono/cookie";
 import { zValidator } from "@hono/zod-validator";
 import { property, formPropertySchema } from "@server/schema/property.schema";
-import { room } from "@server/schema/room.schema";
+import { room, RoomStatus } from "@server/schema/room.schema";
 import { eq, desc, and } from "drizzle-orm";
 import {
   PropertyTable,
@@ -13,7 +13,6 @@ import {
 import { RoomTable } from "@views/properties/RoomComponents";
 import { htmxResponse, htmxToast, htmxPushUrl } from "@server/lib/htmx-helpers";
 import type { AppEnv } from "@server/types";
-import app from "@server/app";
 import { PropertySelector } from "@views/components/NavBar";
 import { SelectionDialog } from "@server/views/components/SelectionDialog";
 import { currencyConvertor } from "@server/lib/utils";
@@ -120,7 +119,12 @@ propertyRoute.post(
       .returning({ id: property.id });
 
     if (data.bedrooms > 0) {
-      const roomsToCreate = [];
+      const roomsToCreate: Array<{
+        propertyId: number;
+        name: string;
+        status: RoomStatus;
+        baseRentAmount: number;
+      }> = [];
       for (let i = 1; i <= data.bedrooms; i++) {
         roomsToCreate.push({
           propertyId: newProp.id,
@@ -396,5 +400,3 @@ propertyRoute.delete("/:id", async (c) => {
     </div>
   `);
 });
-
-export default app;

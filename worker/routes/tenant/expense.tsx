@@ -12,7 +12,8 @@ import {
 import { invoice } from "@server/schema/invoice.schema";
 import { AppEnv } from "@server/types";
 import { requireUser } from "@server/middleware/guard.middleware";
-import { htmxResponse, htmxToast } from "@server/lib/htmx-helpers";
+import { htmxResponse, htmxToast, flashToast } from "@server/lib/htmx-helpers";
+import { InvoiceService } from "@server/services/invoice.service";
 import {
   ExpensePage,
   MarkPaidModal,

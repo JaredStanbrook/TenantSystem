@@ -35,6 +35,7 @@ export const room = sqliteTable("room", {
 
 export const insertRoomSchema = createInsertSchema(room);
 export const selectRoomSchema = createSelectSchema(room);
+export type RoomStatus = (typeof ROOM_STATUS_VALUES)[number];
 
 // Safe Room for Public/Tenant views
 export const safeRoomSchema = selectRoomSchema.pick({

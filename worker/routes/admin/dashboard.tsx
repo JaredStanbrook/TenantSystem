@@ -29,6 +29,10 @@ dashboardRoute.get("/", async (c) => {
   }
 
   const now = new Date();
+  const nowEpoch = Math.floor(now.getTime() / 1000);
+  const windowDays =
+    prop.rentFrequency === "weekly" ? 7 : prop.rentFrequency === "fortnightly" ? 14 : 31;
+  const windowEndEpoch = Math.floor((now.getTime() + windowDays * 24 * 60 * 60 * 1000) / 1000);
 
   // 3. Fetch Metrics in Parallel
   const [
@@ -38,6 +42,7 @@ dashboardRoute.get("/", async (c) => {
     invoiceStats,
     recentInvoices,
     financialHealth,
+    dueNextInvoices,
   ] = await Promise.all([
     // A: Room Stats
     db
@@ -84,20 +89,30 @@ dashboardRoute.get("/", async (c) => {
       .orderBy(desc(invoice.createdAt))
       .limit(5),
 
-    // F: Financial Health (Overdue vs Pending)
+    // F: Financial Health (Overdue vs Pending) + Next cycle
     db
       .select({
-        overdue: sql<number>`sum(case when ${invoice.status} = 'overdue' OR (${
-          invoice.status
-        } = 'open' AND ${invoice.dueDate} < ${now.getTime()}) then ${
-          invoice.totalAmount
-        } else 0 end)`,
-        pending: sql<number>`sum(case when ${invoice.status} = 'open' AND ${
-          invoice.dueDate
-        } >= ${now.getTime()} then ${invoice.totalAmount} else 0 end)`,
+        overdue: sql<number>`sum(case when ${invoice.status} = 'overdue' OR (${invoice.status} IN ('open','partial') AND ${invoice.dueDate} < ${nowEpoch}) then ${invoice.totalAmount} else 0 end)`,
+        pending: sql<number>`sum(case when ${invoice.status} IN ('open','partial') AND ${invoice.dueDate} >= ${nowEpoch} then ${invoice.totalAmount} else 0 end)`,
+        dueNext: sql<number>`sum(case when ${invoice.status} IN ('open','partial') AND ${invoice.dueDate} >= ${nowEpoch} AND ${invoice.dueDate} <= ${windowEndEpoch} then ${invoice.totalAmount} else 0 end)`,
       })
       .from(invoice)
       .where(eq(invoice.propertyId, propertyId)),
+
+    // G: Invoices due next cycle window
+    db
+      .select()
+      .from(invoice)
+      .where(
+        and(
+          eq(invoice.propertyId, propertyId),
+          sql`${invoice.status} IN ('open','partial')`,
+          sql`${invoice.dueDate} >= ${nowEpoch}`,
+          sql`${invoice.dueDate} <= ${windowEndEpoch}`,
+        ),
+      )
+      .orderBy(desc(invoice.dueDate))
+      .limit(6),
   ]);
 
   // 4. Process Data
@@ -121,7 +136,10 @@ dashboardRoute.get("/", async (c) => {
     financials: {
       overdueAmount: Number(financialHealth[0]?.overdue) || 0,
       pendingAmount: Number(financialHealth[0]?.pending) || 0,
+      dueNextAmount: Number(financialHealth[0]?.dueNext) || 0,
     },
+    dueNextInvoices: dueNextInvoices as Invoice[],
+    dueWindowDays: windowDays,
   };
 
   return c.render(<Dashboard property={prop} metrics={metrics} />, {

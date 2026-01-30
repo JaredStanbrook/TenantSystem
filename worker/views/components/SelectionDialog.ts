@@ -39,14 +39,14 @@ export const SelectionDialog = (props: SelectionDialogProps) => {
         aria-modal="true"
         aria-labelledby="selection-modal-title">
         <div
-          class="bg-white rounded-xl shadow-2xl max-w-lg w-full border border-gray-200 overflow-hidden">
-          <div class="bg-gray-50 px-6 py-4 border-b border-gray-100 flex items-start gap-4">
-            <div class="p-2 bg-blue-100 rounded-full text-blue-600 shrink-0">
+          class="bg-background rounded-xl shadow-2xl max-w-lg w-full border border-border overflow-hidden">
+          <div class="bg-muted/40 px-6 py-4 border-b border-border flex items-start gap-4">
+            <div class="p-2 bg-primary/10 rounded-full text-primary shrink-0">
               <i data-lucide="layers" class="h-6 w-6"></i>
             </div>
             <div>
-              <h3 id="selection-modal-title" class="font-bold text-lg text-gray-900">${title}</h3>
-              <p class="text-sm text-gray-600 mt-1">${raw(message)}</p>
+              <h3 id="selection-modal-title" class="font-bold text-lg text-foreground">${title}</h3>
+              <p class="text-sm text-muted-foreground mt-1">${raw(message)}</p>
             </div>
           </div>
 
@@ -69,20 +69,20 @@ export const SelectionDialog = (props: SelectionDialogProps) => {
                   hx-target="${finalTarget}"
                   hx-swap="${finalSwap}"
                   hx-on::after-request="document.getElementById('modal-container').innerHTML = ''"
-                  class="w-full text-left group flex items-start gap-4 p-4 rounded-lg border border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
-                  <div class="mt-0.5 shrink-0 text-gray-400 group-hover:text-blue-600">
+                  class="w-full text-left group flex items-start gap-4 p-4 rounded-lg border border-border hover:border-primary/40 hover:bg-primary/5 transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+                  <div class="mt-0.5 shrink-0 text-muted-foreground group-hover:text-primary">
                     ${choice.icon
                       ? html`<i data-lucide="${choice.icon}" class="w-5 h-5"></i>`
                       : html`<div
-                          class="w-5 h-5 rounded-full border-2 border-current group-hover:bg-blue-600 group-hover:border-blue-600 transition-colors"></div>`}
+                          class="w-5 h-5 rounded-full border-2 border-current group-hover:bg-primary group-hover:border-primary transition-colors"></div>`}
                   </div>
                   <div>
-                    <span class="block font-semibold text-gray-900 group-hover:text-blue-700">
+                    <span class="block font-semibold text-foreground group-hover:text-primary">
                       ${choice.label}
                     </span>
                     ${choice.description &&
                     html`
-                      <span class="block text-sm text-gray-500 mt-0.5 group-hover:text-blue-600/80">
+                      <span class="block text-sm text-muted-foreground mt-0.5 group-hover:text-primary/80">
                         ${choice.description}
                       </span>
                     `}

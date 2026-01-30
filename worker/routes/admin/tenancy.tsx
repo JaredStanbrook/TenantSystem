@@ -347,14 +347,12 @@ tenancyRoute.get("/:id/edit", async (c) => {
       r.id === record.t.roomId || // The tenancy's current room
       ["vacant_ready", "advertised"].includes(r.status), // Or empty rooms
   );
-  console.log(record.t);
-
   return htmxResponse(
     c,
     "Edit Tenancy",
     TenancyForm({
       tenancy: record.t,
-      emailValue: record.u.email,
+      emailValue: record.u.email ?? "",
       properties: myProperties,
       rooms: validRooms, // Pass filtered rooms
       action: `/admin/tenancies/${id}/update`,
@@ -390,6 +388,11 @@ tenancyRoute.post("/:id/update", zValidator("form", updateTenancyFormSchema), as
   }
 
   // 3. Update Tenancy
+  const nextBondAmount =
+    data.bondAmount === undefined ? existing.t.bondAmount : currencyConvertor(data.bondAmount.toString());
+  const nextBilledThroughDate = data.billedThroughDate ?? existing.t.billedThroughDate;
+  const nextStatus = data.status ?? existing.t.status;
+
   await db
     .update(tenancy)
     .set({
@@ -397,7 +400,9 @@ tenancyRoute.post("/:id/update", zValidator("form", updateTenancyFormSchema), as
       roomId: data.roomId,
       startDate: data.startDate,
       endDate: data.endDate,
-      status: data.status,
+      bondAmount: nextBondAmount,
+      billedThroughDate: nextBilledThroughDate,
+      status: nextStatus,
       updatedAt: new Date(),
     })
     .where(eq(tenancy.id, id));

@@ -3,7 +3,7 @@ import { html } from "hono/html";
 import { type Tenancy, TENANCY_STATUS_VALUES } from "@server/schema/tenancy.schema";
 import { VALID_TRANSITIONS } from "@server/services/tenancy.service";
 import { Property } from "../../schema/property.schema";
-import { SafeUser } from "../../schema/auth.schema";
+import { UserSummary } from "../../schema/auth.schema";
 import { SafeRoom } from "../../schema/room.schema";
 import { capitalize, StatusBadge } from "../lib/utils";
 
@@ -20,7 +20,7 @@ const styles: Record<string, string> = {
 
 // Joined Data Type
 type TenancyView = Tenancy & {
-  user: SafeUser;
+  user: UserSummary;
   property: Property;
   room?: SafeRoom | null; // Added Room
 };
@@ -210,7 +210,7 @@ export const TenancyForm = ({
       </button>
     </div>
     <div class="space-y-6 border rounded-xl p-6 bg-card shadow-sm">
-      <form hx-post="${action}" hx-target="#main-content">
+      <form hx-post="${action}" hx-target="#main-content" class="space-y-6">
         <div class="space-y-4">
           <h3 class="text-sm font-semibold text-foreground flex items-center gap-2">
             <i data-lucide="user" class="w-4 h-4"></i> Tenancy Details
@@ -229,7 +229,7 @@ export const TenancyForm = ({
                 value="${emailValue}"
                 ${tenancy?.id ? "disabled" : "required"}
                 placeholder="applicant@example.com"
-                class="flex h-10 w-full pl-9 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 disabled:bg-muted/50" />
+                class="flex h-10 w-full pl-9 rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 disabled:bg-muted/50" />
             </div>
             ${errors.email
               ? html`<p class="text-destructive text-xs font-medium">${errors.email[0]}</p>`
@@ -255,7 +255,7 @@ export const TenancyForm = ({
                 hx-get="/admin/tenancies/rooms-select"
                 hx-target="#room-select"
                 hx-trigger="change"
-                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring">
+                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                 <option value="">Select a Property...</option>
                 ${properties.map(
                   (p) => html`
@@ -275,7 +275,7 @@ export const TenancyForm = ({
               <select
                 id="room-select"
                 name="roomId"
-                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring">
+                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                 <option value="">Select a Room...</option>
                 ${rooms.map(
                   (r) => html`
@@ -308,7 +308,7 @@ export const TenancyForm = ({
                   ? new Date(tenancy.startDate).toISOString().split("T")[0]
                   : ""}"
                 required
-                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring" />
+                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
             </div>
 
             <div class="space-y-2">
@@ -322,7 +322,7 @@ export const TenancyForm = ({
                 value="${tenancy?.endDate
                   ? new Date(tenancy.endDate).toISOString().split("T")[0]
                   : ""}"
-                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring" />
+                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
             </div>
           </div>
 
@@ -335,11 +335,33 @@ export const TenancyForm = ({
                 name="bondAmount"
                 placeholder="0.00"
                 step="0.01"
-                value="${tenancy?.bondAmount || ""}"
-                class="flex h-10 w-full pl-7 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring" />
+                value="${tenancy?.bondAmount ? (tenancy.bondAmount / 100).toFixed(2) : ""}"
+                class="flex h-10 w-full pl-7 rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
             </div>
           </div>
         </div>
+        ${tenancy?.id
+          ? html`
+              <hr class="border-border/50" />
+              <div class="space-y-4">
+                <h3 class="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <i data-lucide="calendar-check" class="w-4 h-4"></i> Billing
+                </h3>
+                <div class="grid grid-cols-2 gap-4">
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium leading-none">Billed Through Date</label>
+                    <input
+                      type="date"
+                      name="billedThroughDate"
+                      value="${tenancy?.billedThroughDate
+                        ? new Date(tenancy.billedThroughDate).toISOString().split("T")[0]
+                        : ""}"
+                      class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                  </div>
+                </div>
+              </div>
+            `
+          : ""}
         <div class="flex justify-end pt-2">
           <button
             type="submit"
@@ -368,7 +390,7 @@ export const TenancyStatusManager = ({
   tenancy: Tenancy;
   helperText?: string;
 }) => {
-  const status = tenancy.status || "pending";
+  const status = tenancy.status || "pending_agreement";
 
   return html`
     <div
@@ -385,7 +407,7 @@ export const TenancyStatusManager = ({
         <form hx-patch="/admin/tenancies/${tenancy.id}/status">
           <select
             name="status"
-            class="h-8 w-full text-xs rounded-md border border-input bg-background px-3 py-1 shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            class="h-8 w-full text-xs rounded-lg border border-input bg-background px-3 py-1 shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             onchange="this.form.requestSubmit()">
             <option value="${status}" selected disabled>Change Status...</option>
             ${TENANCY_STATUS_VALUES.map(

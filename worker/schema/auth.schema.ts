@@ -179,6 +179,11 @@ export const safeUserSchema = selectUserSchema.extend({
   roles: z.array(z.string()),
   permissions: z.array(z.string()),
 });
+export const userSummarySchema = selectUserSchema.pick({
+  id: true,
+  email: true,
+  displayName: true,
+});
 export const propsUserSchema = selectUserSchema.extend({
   roles: z.array(z.string()),
   permissions: z.array(z.string()),
@@ -319,6 +324,7 @@ export type SelectUser = z.infer<typeof selectUserSchema>;
 export type RegisterUser = z.infer<typeof registerUserSchema>;
 export type LoginUser = z.infer<typeof loginUserSchema>;
 export type SafeUser = z.infer<typeof safeUserSchema>;
+export type UserSummary = z.infer<typeof userSummarySchema>;
 export type PropsUser = z.infer<typeof propsUserSchema>;
 export type RegisterPasskeyVerify = z.infer<typeof registerPasskeyVerifySchema>;
 export type LoginPasskeyVerify = z.infer<typeof loginPasskeyVerifySchema>;

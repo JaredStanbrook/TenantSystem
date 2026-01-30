@@ -33,7 +33,8 @@ export const PropertyRow = ({ prop }: { prop: Property }) => html`
           hx-swap="innerHTML"
           hx-push-url="true"
           class="inline-flex items-center justify-center rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring border border-input bg-background hover:bg-blue-50 hover:text-blue-600 h-8 w-8"
-          title="Manage Rooms">
+          title="Manage Rooms"
+        >
           <i data-lucide="door-open" class="w-4 h-4"></i>
         </button>
         <button
@@ -42,7 +43,8 @@ export const PropertyRow = ({ prop }: { prop: Property }) => html`
           hx-swap="innerHTML"
           hx-push-url="true"
           class="inline-flex items-center justify-center rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-8 w-8"
-          aria-label="Edit property">
+          aria-label="Edit property"
+        >
           <i data-lucide="pencil" class="w-4 h-4"></i>
         </button>
 
@@ -52,7 +54,8 @@ export const PropertyRow = ({ prop }: { prop: Property }) => html`
           hx-swap="outerHTML swap:0.5s"
           hx-confirm="Are you sure you want to delete this property?"
           class="inline-flex items-center justify-center rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-destructive hover:text-destructive-foreground h-8 w-8"
-          aria-label="Delete property">
+          aria-label="Delete property"
+        >
           <i data-lucide="trash-2" class="w-4 h-4"></i>
         </button>
       </div>
@@ -71,7 +74,9 @@ export const PropertyForm = ({
   action: string;
   errors?: Record<string, string[]>;
 }) => html`
-  <div class="max-w-7xl mx-auto space-y-8 p-8 pt-20 animate-in fade-in duration-500">
+  <div
+    class="max-w-7xl mx-auto space-y-8 p-8 pt-20 animate-in fade-in duration-500"
+  >
     <div class="space-y-4 animate-in fade-in duration-300">
       <div class="flex items-center justify-between">
         <div>
@@ -84,7 +89,8 @@ export const PropertyForm = ({
           hx-target="#main-content"
           hx-swap="innerHTML"
           hx-push-url="true"
-          class="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+          class="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+        >
           <i data-lucide="arrow-left" class="w-4 h-4"></i> Back to list
         </button>
       </div>
@@ -93,7 +99,8 @@ export const PropertyForm = ({
         hx-post="${action}"
         hx-target="#main-content"
         hx-swap="innerHTML"
-        class="space-y-8 border rounded-lg p-6 bg-card text-card-foreground shadow-sm">
+        class="space-y-8 border rounded-lg p-6 bg-card text-card-foreground shadow-sm"
+      >
         <div class="grid gap-4 md:grid-cols-2">
           <div class="space-y-2">
             <label class="text-sm font-medium">Nickname</label>
@@ -101,16 +108,21 @@ export const PropertyForm = ({
               name="nickname"
               value="${prop?.nickname || ""}"
               placeholder="e.g. The Beach House"
-              class="flex h-10 w-full rounded-lg border border-input px-3" />
+              class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
           </div>
           <div class="space-y-2">
             <label class="text-sm font-medium">Type</label>
             <select
               name="propertyType"
-              class="flex h-10 w-full rounded-lg border border-input px-3">
+              class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
               ${["house", "apartment", "unit", "studio", "townhouse"].map(
                 (t) =>
-                  html`<option value="${t}" ${prop?.propertyType === t ? "selected" : ""}>
+                  html`<option
+                    value="${t}"
+                    ${prop?.propertyType === t ? "selected" : ""}
+                  >
                     ${t.charAt(0).toUpperCase() + t.slice(1)}
                   </option>`,
               )}
@@ -140,11 +152,14 @@ export const PropertyForm = ({
                 id="address-line-1"
                 name="addressLine1"
                 value="${prop?.addressLine1 || ""}"
-                class="flex h-10 w-full rounded-lg border border-input px-3"
+                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 placeholder="Street Number and Name"
-                required />
+                required
+              />
               ${errors.addressLine1
-                ? html`<p class="text-sm text-destructive">${errors.addressLine1[0]}</p>`
+                ? html`<p class="text-sm text-destructive">
+                    ${errors.addressLine1[0]}
+                  </p>`
                 : ""}
             </div>
 
@@ -156,7 +171,8 @@ export const PropertyForm = ({
                   name="city"
                   value="${prop?.city || ""}"
                   required
-                  class="flex h-10 w-full rounded-lg border border-input px-3 bg-muted/20" />
+                  class="flex h-10 w-full rounded-lg border border-input bg-muted/20 px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
               </div>
               <div class="space-y-2">
                 <label class="text-sm font-medium">State</label>
@@ -165,7 +181,8 @@ export const PropertyForm = ({
                   name="state"
                   value="${prop?.state || ""}"
                   required
-                  class="flex h-10 w-full rounded-lg border border-input px-3 bg-muted/20" />
+                  class="flex h-10 w-full rounded-lg border border-input bg-muted/20 px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
               </div>
               <div class="space-y-2">
                 <label class="text-sm font-medium">Postcode</label>
@@ -174,7 +191,8 @@ export const PropertyForm = ({
                   name="postcode"
                   value="${prop?.postcode || ""}"
                   required
-                  class="flex h-10 w-full rounded-lg border border-input px-3 bg-muted/20" />
+                  class="flex h-10 w-full rounded-lg border border-input bg-muted/20 px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
               </div>
               <div class="space-y-2">
                 <label class="text-sm font-medium">Country</label>
@@ -182,7 +200,8 @@ export const PropertyForm = ({
                   id="country-input"
                   name="country"
                   value="${prop?.country || "Australia"}"
-                  class="flex h-10 w-full rounded-lg border border-input px-3 bg-muted/20" />
+                  class="flex h-10 w-full rounded-lg border border-input bg-muted/20 px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
               </div>
             </div>
           </div>
@@ -195,7 +214,9 @@ export const PropertyForm = ({
           </h3>
           <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div class="space-y-2">
-              <label class="text-sm font-medium leading-none flex items-center gap-1">
+              <label
+                class="text-sm font-medium leading-none flex items-center gap-1"
+              >
                 <i data-lucide="bed" class="w-4 h-4"></i>
                 Bedrooms <span class="text-destructive">*</span>
               </label>
@@ -205,10 +226,13 @@ export const PropertyForm = ({
                 value="${prop?.bedrooms ?? 1}"
                 min="0"
                 required
-                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
             </div>
             <div class="space-y-2">
-              <label class="text-sm font-medium leading-none flex items-center gap-1">
+              <label
+                class="text-sm font-medium leading-none flex items-center gap-1"
+              >
                 <i data-lucide="bath" class="w-4 h-4"></i>
                 Bathrooms <span class="text-destructive">*</span>
               </label>
@@ -219,10 +243,13 @@ export const PropertyForm = ({
                 min="0"
                 step="0.5"
                 required
-                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
             </div>
             <div class="space-y-2">
-              <label class="text-sm font-medium leading-none flex items-center gap-1">
+              <label
+                class="text-sm font-medium leading-none flex items-center gap-1"
+              >
                 <i data-lucide="car" class="w-4 h-4"></i>
                 Parking
               </label>
@@ -231,34 +258,44 @@ export const PropertyForm = ({
                 name="parkingSpaces"
                 value="${prop?.parkingSpaces ?? 0}"
                 min="0"
-                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
             </div>
           </div>
           <div class="grid gap-4 md:grid-cols-2">
             <div class="space-y-2">
-              <label class="text-sm font-medium">Rent Amount (Cents)</label>
+              <label class="text-sm font-medium">Rent Amount ($)</label>
               <input
                 type="number"
                 name="rentAmount"
                 value="${(prop?.rentAmount ?? 0) / 100 || ""}"
                 step="0.01"
                 required
-                class="flex h-10 w-full rounded-lg border border-input px-3" />
+                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
             </div>
             <div class="space-y-2">
               <label class="text-sm font-medium">Frequency</label>
               <select
                 name="rentFrequency"
-                class="flex h-10 w-full rounded-lg border border-input px-3">
-                <option value="weekly" ${prop?.rentFrequency === "weekly" ? "selected" : ""}>
+                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option
+                  value="weekly"
+                  ${prop?.rentFrequency === "weekly" ? "selected" : ""}
+                >
                   Weekly
                 </option>
                 <option
                   value="fortnightly"
-                  ${prop?.rentFrequency === "fortnightly" ? "selected" : ""}>
+                  ${prop?.rentFrequency === "fortnightly" ? "selected" : ""}
+                >
                   Fortnightly
                 </option>
-                <option value="monthly" ${prop?.rentFrequency === "monthly" ? "selected" : ""}>
+                <option
+                  value="monthly"
+                  ${prop?.rentFrequency === "monthly" ? "selected" : ""}
+                >
                   Monthly
                 </option>
               </select>
@@ -269,7 +306,8 @@ export const PropertyForm = ({
         <div class="flex justify-end gap-3 pt-4 border-t">
           <button
             type="submit"
-            class="bg-primary text-primary-foreground h-10 px-4 rounded-lg hover:bg-primary/90 transition-colors">
+            class="bg-primary text-primary-foreground h-10 px-4 rounded-lg hover:bg-primary/90 transition-colors"
+          >
             Save Property
           </button>
         </div>
@@ -292,7 +330,8 @@ export const PropertyForm = ({
           if (!container) return;
 
           try {
-            const { PlaceAutocompleteElement } = await google.maps.importLibrary("places");
+            const { PlaceAutocompleteElement } =
+              await google.maps.importLibrary("places");
 
             // Create Widget
             placeAutocomplete = new PlaceAutocompleteElement();
@@ -304,7 +343,13 @@ export const PropertyForm = ({
               "border",
               "border-input",
               "bg-background",
+              "px-3",
+              "py-2",
               "text-sm",
+              "ring-offset-background",
+              "focus-visible:outline-none",
+              "focus-visible:ring-2",
+              "focus-visible:ring-ring",
             );
 
             // Mount
@@ -319,9 +364,12 @@ export const PropertyForm = ({
             countryField = document.getElementById("country-input");
 
             // Listen for selection
-            placeAutocomplete.addEventListener("gmp-select", async ({ placePrediction }) => {
-              await fillInAddress(placePrediction);
-            });
+            placeAutocomplete.addEventListener(
+              "gmp-select",
+              async ({ placePrediction }) => {
+                await fillInAddress(placePrediction);
+              },
+            );
           } catch (e) {
             console.error("Google Places failed to load", e);
             // If API fails, remove the search container so user just sees standard inputs
@@ -403,8 +451,14 @@ export const PropertyForm = ({
 `;
 
 // --- 3. Properties Table Layout ---
-export const PropertyTable = ({ properties }: { properties: Property[] }) => html`
-  <div class="max-w-7xl mx-auto space-y-8 p-8 pt-20 animate-in fade-in duration-500">
+export const PropertyTable = ({
+  properties,
+}: {
+  properties: Property[];
+}) => html`
+  <div
+    class="max-w-7xl mx-auto space-y-8 p-8 pt-20 animate-in fade-in duration-500"
+  >
     <div class="space-y-4 animate-in fade-in duration-300">
       <div class="flex items-center justify-between">
         <div>
@@ -419,7 +473,8 @@ export const PropertyTable = ({ properties }: { properties: Property[] }) => htm
           hx-target="#main-content"
           hx-swap="innerHTML"
           hx-push-url="true"
-          class="inline-flex items-center justify-center gap-2 text-sm rounded-lg font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2">
+          class="inline-flex items-center justify-center gap-2 text-sm rounded-lg font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+        >
           <i data-lucide="plus" class="w-4 h-4"></i>
           Add Property
         </button>
@@ -430,19 +485,29 @@ export const PropertyTable = ({ properties }: { properties: Property[] }) => htm
           <table class="w-full caption-bottom text-sm">
             <thead class="[&_tr]:border-b bg-muted/50">
               <tr class="border-b transition-colors">
-                <th class="h-12 px-4 text-left align-middle font-semibold text-muted-foreground">
+                <th
+                  class="h-12 px-4 text-left align-middle font-semibold text-muted-foreground"
+                >
                   Nickname
                 </th>
-                <th class="h-12 px-4 text-left align-middle font-semibold text-muted-foreground">
+                <th
+                  class="h-12 px-4 text-left align-middle font-semibold text-muted-foreground"
+                >
                   Address
                 </th>
-                <th class="h-12 px-4 text-left align-middle font-semibold text-muted-foreground">
+                <th
+                  class="h-12 px-4 text-left align-middle font-semibold text-muted-foreground"
+                >
                   Specs
                 </th>
-                <th class="h-12 px-4 text-left align-middle font-semibold text-muted-foreground">
+                <th
+                  class="h-12 px-4 text-left align-middle font-semibold text-muted-foreground"
+                >
                   Status
                 </th>
-                <th class="h-12 px-4 text-right align-middle font-semibold text-muted-foreground">
+                <th
+                  class="h-12 px-4 text-right align-middle font-semibold text-muted-foreground"
+                >
                   Actions
                 </th>
               </tr>
@@ -451,11 +516,17 @@ export const PropertyTable = ({ properties }: { properties: Property[] }) => htm
               ${properties.length === 0
                 ? html` <tr>
                     <td colspan="5" class="p-12 text-center">
-                      <div class="flex flex-col items-center gap-3 text-muted-foreground">
+                      <div
+                        class="flex flex-col items-center gap-3 text-muted-foreground"
+                      >
                         <i data-lucide="home" class="w-12 h-12 opacity-50"></i>
                         <div>
-                          <p class="font-medium text-foreground">No properties found</p>
-                          <p class="text-sm">Click "Add Property" to create your first property</p>
+                          <p class="font-medium text-foreground">
+                            No properties found
+                          </p>
+                          <p class="text-sm">
+                            Click "Add Property" to create your first property
+                          </p>
                         </div>
                       </div>
                     </td>
@@ -493,10 +564,15 @@ export const RentReconciliationModal = ({
 
   return html`
     <div id="modal-container" hx-swap-oob="innerHTML">
-      <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div
+        class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      >
         <div
-          class="bg-white rounded-xl shadow-2xl max-w-lg w-full border border-gray-200 overflow-hidden">
-          <div class="bg-blue-50 px-6 py-4 border-b border-blue-100 flex items-start gap-4">
+          class="bg-white rounded-xl shadow-2xl max-w-lg w-full border border-gray-200 overflow-hidden"
+        >
+          <div
+            class="bg-blue-50 px-6 py-4 border-b border-blue-100 flex items-start gap-4"
+          >
             <div class="p-2 bg-blue-100 rounded-full text-blue-600">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -507,16 +583,20 @@ export const RentReconciliationModal = ({
                 stroke="currentColor"
                 stroke-width="2"
                 stroke-linecap="round"
-                stroke-linejoin="round">
+                stroke-linejoin="round"
+              >
                 <line x1="12" x2="12" y1="2" y2="22" />
                 <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
               </svg>
             </div>
             <div>
-              <h3 class="font-bold text-lg text-gray-900">Rent Adjustment Required</h3>
+              <h3 class="font-bold text-lg text-gray-900">
+                Rent Adjustment Required
+              </h3>
               <p class="text-sm text-gray-600">
-                You are ${actionText.toLowerCase()} <strong>${diff} room(s)</strong>. How should
-                this affect the rent?
+                You are ${actionText.toLowerCase()}
+                <strong>${diff} room(s)</strong>. How should this affect the
+                rent?
               </p>
             </div>
           </div>
@@ -529,38 +609,45 @@ export const RentReconciliationModal = ({
                 rentStrategy: "distribute_property_rent",
               })}"
               hx-target="#main-content"
-              class="w-full text-left group flex items-start gap-3 p-3 rounded-lg border hover:border-blue-500 hover:bg-blue-50 transition-all">
+              class="w-full text-left group flex items-start gap-3 p-3 rounded-lg border hover:border-blue-500 hover:bg-blue-50 transition-all"
+            >
               <div class="mt-0.5">
                 <div
-                  class="w-4 h-4 rounded-full border border-gray-400 group-hover:border-blue-600 group-hover:bg-blue-600"></div>
+                  class="w-4 h-4 rounded-full border border-gray-400 group-hover:border-blue-600 group-hover:bg-blue-600"
+                ></div>
               </div>
               <div>
                 <span class="block font-semibold text-gray-900"
                   >Keep Property Rent at $${targetRent}</span
                 >
                 <span class="block text-sm text-gray-500">
-                  Rescale ${isAdding ? "all" : "remaining"} room prices proportionally to match this
-                  total.
+                  Rescale ${isAdding ? "all" : "remaining"} room prices
+                  proportionally to match this total.
                 </span>
               </div>
             </button>
 
             <button
               hx-post="/admin/properties/${id}/update"
-              hx-vals="${JSON.stringify({ ...formPayload, rentStrategy: "preserve_room_rates" })}"
+              hx-vals="${JSON.stringify({
+                ...formPayload,
+                rentStrategy: "preserve_room_rates",
+              })}"
               hx-target="body"
-              class="w-full text-left group flex items-start gap-3 p-3 rounded-lg border hover:border-blue-500 hover:bg-blue-50 transition-all">
+              class="w-full text-left group flex items-start gap-3 p-3 rounded-lg border hover:border-blue-500 hover:bg-blue-50 transition-all"
+            >
               <div class="mt-0.5">
                 <div
-                  class="w-4 h-4 rounded-full border border-gray-400 group-hover:border-blue-600 group-hover:bg-blue-600"></div>
+                  class="w-4 h-4 rounded-full border border-gray-400 group-hover:border-blue-600 group-hover:bg-blue-600"
+                ></div>
               </div>
               <div>
                 <span class="block font-semibold text-gray-900"
                   >Preserve Individual Room Rates</span
                 >
                 <span class="block text-sm text-gray-500">
-                  Keep existing room prices. The total property rent will be updated automatically
-                  based on the sum of rooms.
+                  Keep existing room prices. The total property rent will be
+                  updated automatically based on the sum of rooms.
                 </span>
               </div>
             </button>
@@ -569,7 +656,8 @@ export const RentReconciliationModal = ({
           <div class="px-6 py-4 bg-gray-50 flex justify-end">
             <button
               onclick="document.getElementById('modal-container').innerHTML = ''"
-              class="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md">
+              class="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md"
+            >
               Cancel
             </button>
           </div>

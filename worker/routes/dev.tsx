@@ -297,7 +297,7 @@ devRouter.get("/", async (c) => {
               <tbody>
                 ${table.data
                   .map(
-                    (row) => `
+                    (row: Record<string, unknown>) => `
                   <tr>
                     ${Object.entries(row)
                       .map(([key, value]) => {
