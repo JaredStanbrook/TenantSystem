@@ -5,63 +5,114 @@ const styles: Record<string, string> = {
   vacant: "bg-blue-100 text-blue-800 border-blue-200",
   occupied: "bg-emerald-100 text-emerald-800 border-emerald-200",
   maintenance: "bg-purple-100 text-purple-800 border-purple-200",
+  archived: "bg-gray-100 text-gray-700 border-gray-200",
 };
 
 // --- 1. Property Table Row ---
-export const PropertyRow = ({ prop }: { prop: Property }) => html`
-  <tr class="hover:bg-muted/50 transition-colors border-b" id="row-${prop.id}">
-    <td class="p-4 align-middle font-medium">${prop.nickname || "—"}</td>
-    <td class="p-4 align-middle">
-      ${prop.addressLine1}, ${prop.city} ${prop.state} ${prop.postcode}
-    </td>
-    <td class="p-4 align-middle">
-      <div class="flex gap-2 text-sm text-muted-foreground">
-        <span class="flex items-center gap-1">
-          <i data-lucide="bed" class="w-4 h-4"></i> ${prop.bedrooms}
-        </span>
-        <span class="flex items-center gap-1">
-          <i data-lucide="bath" class="w-4 h-4"></i> ${prop.bathrooms}
-        </span>
-      </div>
-    </td>
-    <td class="p-4 align-middle">${StatusBadge(prop.status, styles)}</td>
-    <td class="p-4 align-middle text-right">
-      <div class="flex justify-end gap-2">
-        <button
-          hx-get="/admin/properties/${prop.id}/rooms"
-          hx-target="#main-content"
-          hx-swap="innerHTML"
-          hx-push-url="true"
-          class="inline-flex items-center justify-center rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring border border-input bg-background hover:bg-blue-50 hover:text-blue-600 h-8 w-8"
-          title="Manage Rooms"
-        >
-          <i data-lucide="door-open" class="w-4 h-4"></i>
-        </button>
-        <button
-          hx-get="/admin/properties/${prop.id}/edit"
-          hx-target="#main-content"
-          hx-swap="innerHTML"
-          hx-push-url="true"
-          class="inline-flex items-center justify-center rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-8 w-8"
-          aria-label="Edit property"
-        >
-          <i data-lucide="pencil" class="w-4 h-4"></i>
-        </button>
+export const PropertyRow = ({
+  prop,
+  showAll = false,
+}: {
+  prop: Property;
+  showAll?: boolean;
+}) => {
+  const isDeleted = !!prop.deletedAt;
+  const statusValue = isDeleted ? "archived" : prop.status;
+  const searchBlob =
+    `${prop.nickname || ""} ${prop.addressLine1} ${prop.city} ${prop.state} ${
+      prop.postcode
+    }`
+      .trim()
+      .toLowerCase();
 
-        <button
-          hx-delete="/admin/properties/${prop.id}"
-          hx-target="#row-${prop.id}"
-          hx-swap="outerHTML swap:0.5s"
-          hx-confirm="Are you sure you want to delete this property?"
-          class="inline-flex items-center justify-center rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-destructive hover:text-destructive-foreground h-8 w-8"
-          aria-label="Delete property"
-        >
-          <i data-lucide="trash-2" class="w-4 h-4"></i>
-        </button>
-      </div>
-    </td>
-  </tr>
-`;
+  return html`
+    <tr
+      class="hover:bg-muted/50 transition-colors border-b ${isDeleted
+        ? "opacity-70"
+        : ""}"
+      id="row-${prop.id}"
+      data-title="${searchBlob}"
+      data-status="${statusValue}"
+      data-bedrooms="${prop.bedrooms}"
+      data-archived="${isDeleted ? "true" : "false"}"
+    >
+      <td class="p-4 align-middle font-medium">${prop.nickname || "—"}</td>
+      <td class="p-4 align-middle">
+        ${prop.addressLine1}, ${prop.city} ${prop.state} ${prop.postcode}
+      </td>
+      <td class="p-4 align-middle">
+        <div class="flex gap-2 text-sm text-muted-foreground">
+          <span class="flex items-center gap-1">
+            <i data-lucide="bed" class="w-4 h-4"></i> ${prop.bedrooms}
+          </span>
+          <span class="flex items-center gap-1">
+            <i data-lucide="bath" class="w-4 h-4"></i> ${prop.bathrooms}
+          </span>
+        </div>
+      </td>
+      <td class="p-4 align-middle">${StatusBadge(statusValue, styles)}</td>
+      <td class="p-4 align-middle text-right">
+        <div class="flex justify-end gap-2">
+          ${!isDeleted
+            ? html`
+                <button
+                  hx-get="/admin/properties/${prop.id}/rooms"
+                  hx-target="#main-content"
+                  hx-swap="innerHTML"
+                  hx-push-url="true"
+                  class="inline-flex items-center justify-center rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring border border-input bg-background hover:bg-blue-50 hover:text-blue-600 h-8 w-8"
+                  title="Manage Rooms"
+                >
+                  <i data-lucide="door-open" class="w-4 h-4"></i>
+                </button>
+                <button
+                  hx-get="/admin/properties/${prop.id}/edit"
+                  hx-target="#main-content"
+                  hx-swap="innerHTML"
+                  hx-push-url="true"
+                  class="inline-flex items-center justify-center rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-8 w-8"
+                  aria-label="Edit property"
+                >
+                  <i data-lucide="pencil" class="w-4 h-4"></i>
+                </button>
+              `
+            : ""}
+          ${isDeleted
+            ? html`
+                <button
+                  hx-post="/admin/properties/${prop.id}/restore?showAll=true"
+                  hx-target="closest tr"
+                  hx-swap="outerHTML"
+                  class="inline-flex items-center justify-center rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring border border-input bg-background hover:bg-emerald-50 hover:text-emerald-700 h-8 w-8"
+                  aria-label="Restore property"
+                  title="Restore property"
+                >
+                  <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </button>
+              `
+            : ""}
+
+          <button
+            hx-delete="/admin/properties/${prop.id}${showAll
+              ? "?showAll=true"
+              : ""}"
+            hx-target="closest tr"
+            hx-swap="${isDeleted ? "outerHTML" : "outerHTML swap:0.5s"}"
+            class="inline-flex items-center justify-center rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-destructive hover:text-destructive-foreground h-8 w-8"
+            aria-label="${isDeleted
+              ? "Force delete property"
+              : "Delete property"}"
+            title="${isDeleted
+              ? "Permanently delete property"
+              : "Archive property"}"
+          >
+            <i data-lucide="trash-2" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </td>
+    </tr>
+  `;
+};
 
 // --- 2. Property Form (Create & Edit) ---
 // --- 2. Property Form (Create & Edit) ---
@@ -99,8 +150,23 @@ export const PropertyForm = ({
         hx-post="${action}"
         hx-target="#main-content"
         hx-swap="innerHTML"
-        class="space-y-8 border rounded-lg p-6 bg-card text-card-foreground shadow-sm"
+        class="space-y-8 rounded-2xl border bg-gradient-to-b from-card to-card/70 p-6 shadow-sm md:p-8"
       >
+        <div class="rounded-xl border bg-muted/30 p-4">
+          <div class="flex items-center gap-3">
+            <div
+              class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary"
+            >
+              <i data-lucide="building" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <p class="text-sm text-muted-foreground">Property Profile</p>
+              <p class="text-base font-semibold">
+                ${prop?.nickname || prop?.addressLine1 || "New Property"}
+              </p>
+            </div>
+          </div>
+        </div>
         <div class="grid gap-4 md:grid-cols-2">
           <div class="space-y-2">
             <label class="text-sm font-medium">Nickname</label>
@@ -131,9 +197,14 @@ export const PropertyForm = ({
         </div>
 
         <div class="space-y-4">
-          <h3 class="text-lg font-semibold flex items-center gap-2">
-            <i data-lucide="map-pin" class="w-5 h-5"></i> Location
-          </h3>
+          <div class="flex items-center justify-between">
+            <h3 class="text-lg font-semibold flex items-center gap-2">
+              <i data-lucide="map-pin" class="w-5 h-5"></i> Location
+            </h3>
+            <span class="text-xs text-muted-foreground"
+              >Auto-complete supported</span
+            >
+          </div>
 
           <div class="grid gap-4">
             <div class="space-y-2">
@@ -163,7 +234,9 @@ export const PropertyForm = ({
                 : ""}
             </div>
 
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div
+              class="grid grid-cols-2 md:grid-cols-4 gap-4 rounded-xl border bg-background/60 p-4"
+            >
               <div class="space-y-2">
                 <label class="text-sm font-medium">City</label>
                 <input
@@ -171,7 +244,7 @@ export const PropertyForm = ({
                   name="city"
                   value="${prop?.city || ""}"
                   required
-                  class="flex h-10 w-full rounded-lg border border-input bg-muted/20 px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
               </div>
               <div class="space-y-2">
@@ -181,7 +254,7 @@ export const PropertyForm = ({
                   name="state"
                   value="${prop?.state || ""}"
                   required
-                  class="flex h-10 w-full rounded-lg border border-input bg-muted/20 px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
               </div>
               <div class="space-y-2">
@@ -191,7 +264,7 @@ export const PropertyForm = ({
                   name="postcode"
                   value="${prop?.postcode || ""}"
                   required
-                  class="flex h-10 w-full rounded-lg border border-input bg-muted/20 px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
               </div>
               <div class="space-y-2">
@@ -200,7 +273,7 @@ export const PropertyForm = ({
                   id="country-input"
                   name="country"
                   value="${prop?.country || "Australia"}"
-                  class="flex h-10 w-full rounded-lg border border-input bg-muted/20 px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
               </div>
             </div>
@@ -208,10 +281,13 @@ export const PropertyForm = ({
         </div>
 
         <div class="space-y-4">
-          <h3 class="text-lg font-semibold flex items-center gap-2">
-            <i data-lucide="home" class="w-5 h-5"></i>
-            Property Details
-          </h3>
+          <div class="flex items-center justify-between">
+            <h3 class="text-lg font-semibold flex items-center gap-2">
+              <i data-lucide="home" class="w-5 h-5"></i>
+              Property Details
+            </h3>
+            <span class="text-xs text-muted-foreground">Units and pricing</span>
+          </div>
           <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div class="space-y-2">
               <label
@@ -263,18 +339,28 @@ export const PropertyForm = ({
             </div>
           </div>
           <div class="grid gap-4 md:grid-cols-2">
-            <div class="space-y-2">
+            <div class="space-y-2 rounded-xl border bg-background/60 p-4">
               <label class="text-sm font-medium">Rent Amount ($)</label>
-              <input
-                type="number"
-                name="rentAmount"
-                value="${(prop?.rentAmount ?? 0) / 100 || ""}"
-                step="0.01"
-                required
-                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
+              <div class="relative">
+                <span
+                  class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground"
+                >
+                  $
+                </span>
+                <input
+                  type="number"
+                  name="rentAmount"
+                  value="${(prop?.rentAmount ?? 0) / 100 || ""}"
+                  step="0.01"
+                  required
+                  class="flex h-10 w-full rounded-lg border border-input bg-background pl-7 pr-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+              </div>
+              <p class="text-xs text-muted-foreground">
+                Stored in cents for accuracy.
+              </p>
             </div>
-            <div class="space-y-2">
+            <div class="space-y-2 rounded-xl border bg-background/60 p-4">
               <label class="text-sm font-medium">Frequency</label>
               <select
                 name="rentFrequency"
@@ -299,15 +385,23 @@ export const PropertyForm = ({
                   Monthly
                 </option>
               </select>
+              <p class="text-xs text-muted-foreground">
+                Used for invoice scheduling.
+              </p>
             </div>
           </div>
         </div>
 
-        <div class="flex justify-end gap-3 pt-4 border-t">
+        <div class="flex items-center justify-between gap-3 border-t pt-4">
+          <p class="text-xs text-muted-foreground">
+            Fields marked with <span class="text-destructive">*</span> are
+            required.
+          </p>
           <button
             type="submit"
-            class="bg-primary text-primary-foreground h-10 px-4 rounded-lg hover:bg-primary/90 transition-colors"
+            class="inline-flex items-center gap-2 bg-primary text-primary-foreground h-10 px-5 rounded-lg hover:bg-primary/90 transition-colors"
           >
+            <i data-lucide="save" class="w-4 h-4"></i>
             Save Property
           </button>
         </div>
@@ -343,8 +437,6 @@ export const PropertyForm = ({
               "border",
               "border-input",
               "bg-background",
-              "px-3",
-              "py-2",
               "text-sm",
               "ring-offset-background",
               "focus-visible:outline-none",
@@ -453,14 +545,18 @@ export const PropertyForm = ({
 // --- 3. Properties Table Layout ---
 export const PropertyTable = ({
   properties,
+  showAll = false,
 }: {
   properties: Property[];
+  showAll?: boolean;
 }) => html`
   <div
     class="max-w-7xl mx-auto space-y-8 p-8 pt-20 animate-in fade-in duration-500"
   >
     <div class="space-y-4 animate-in fade-in duration-300">
-      <div class="flex items-center justify-between">
+      <div
+        class="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+      >
         <div>
           <h2 class="text-3xl font-bold tracking-tight">Properties</h2>
           <p class="text-muted-foreground mt-1">
@@ -468,16 +564,94 @@ export const PropertyTable = ({
             ${properties.length === 1 ? "property" : "properties"} total.
           </p>
         </div>
-        <button
-          hx-get="/admin/properties/create"
-          hx-target="#main-content"
-          hx-swap="innerHTML"
-          hx-push-url="true"
-          class="inline-flex items-center justify-center gap-2 text-sm rounded-lg font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+        <div class="flex items-center gap-3">
+          <button
+            hx-get="/admin/properties/create"
+            hx-target="#main-content"
+            hx-swap="innerHTML"
+            hx-push-url="true"
+            class="inline-flex items-center justify-center gap-2 text-sm rounded-lg font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+          >
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            Add Property
+          </button>
+        </div>
+      </div>
+
+      <div
+        class="rounded-2xl border bg-card p-4 shadow-sm md:p-5"
+        id="property-filters"
+      >
+        <div class="grid gap-3 md:grid-cols-[1.4fr_0.8fr_auto_auto]">
+          <div class="relative">
+            <i
+              data-lucide="search"
+              class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+            ></i>
+            <input
+              id="property-search"
+              type="search"
+              placeholder="Search by nickname or address..."
+              class="flex h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+          </div>
+          <select
+            id="property-status"
+            class="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="all">All statuses</option>
+            <option value="vacant">Vacant</option>
+            <option value="occupied">Occupied</option>
+            <option value="maintenance">Maintenance</option>
+            ${showAll ? html`<option value="archived">Archived</option>` : ""}
+          </select>
+          <label
+            class="flex h-10 items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm"
+          >
+            <input
+              type="checkbox"
+              id="property-history"
+              name="showAll"
+              value="true"
+              ${showAll ? "checked" : ""}
+              class="accent-primary h-4 w-4"
+            />
+            History
+          </label>
+          <button
+            id="property-reset"
+            class="inline-flex h-10 items-center justify-center rounded-lg border border-input bg-background px-4 text-sm font-medium hover:bg-accent"
+          >
+            Reset
+          </button>
+        </div>
+
+        <div
+          class="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"
         >
-          <i data-lucide="plus" class="w-4 h-4"></i>
-          Add Property
-        </button>
+          <span>Quick filters:</span>
+          <button
+            type="button"
+            data-status="vacant"
+            class="rounded-full border border-input bg-background px-3 py-1 hover:bg-accent"
+          >
+            Vacant
+          </button>
+          <button
+            type="button"
+            data-status="occupied"
+            class="rounded-full border border-input bg-background px-3 py-1 hover:bg-accent"
+          >
+            Occupied
+          </button>
+          <button
+            type="button"
+            data-status="maintenance"
+            class="rounded-full border border-input bg-background px-3 py-1 hover:bg-accent"
+          >
+            Maintenance
+          </button>
+        </div>
       </div>
 
       <div class="rounded-lg border bg-card shadow-sm overflow-hidden">
@@ -512,7 +686,7 @@ export const PropertyTable = ({
                 </th>
               </tr>
             </thead>
-            <tbody class="[&_tr:last-child]:border-0">
+            <tbody class="[&_tr:last-child]:border-0" id="property-list">
               ${properties.length === 0
                 ? html` <tr>
                     <td colspan="5" class="p-12 text-center">
@@ -531,7 +705,7 @@ export const PropertyTable = ({
                       </div>
                     </td>
                   </tr>`
-                : properties.map((p) => PropertyRow({ prop: p }))}
+                : properties.map((p) => PropertyRow({ prop: p, showAll }))}
             </tbody>
           </table>
         </div>

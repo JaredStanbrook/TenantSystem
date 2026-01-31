@@ -56,8 +56,17 @@ export const ExpenseCard = (item: ExpenseView) => {
   const isOverdue = !isPaid && new Date() > effectiveDueDate;
   const statusLabel = isOverdue ? "overdue" : payment.status;
 
+  const searchBlob = `${invoice.description || ""} ${invoice.type}`.trim().toLowerCase();
+
   return html`
-    <div class="bg-card text-card-foreground rounded-lg border shadow-sm p-6 space-y-4">
+    <div
+      class="bg-card text-card-foreground rounded-lg border shadow-sm p-6 space-y-4 expense-card"
+      data-title="${searchBlob}"
+      data-type="${invoice.type}"
+      data-status="${statusLabel}"
+      data-extension="${payment.extensionStatus}"
+      data-paid="${isPaid ? "true" : "false"}"
+      data-due="${effectiveDueDate.getTime()}">
       <div class="flex justify-between items-start">
         <div>
           <h3 class="font-semibold text-lg">${invoice.description || invoice.type}</h3>
@@ -141,9 +150,76 @@ export const ExpenseCard = (item: ExpenseView) => {
 
 export const ExpensePage = (expenses: ExpenseView[]) => html`
   <div class="max-w-4xl mx-auto space-y-8 p-8 pt-20 animate-in fade-in duration-500">
-    <div>
+    <div class="space-y-2">
       <h1 class="text-3xl font-bold tracking-tight">My Expenses</h1>
-      <p class="text-muted-foreground mt-1">Manage your rent and utility payments.</p>
+      <p class="text-muted-foreground">Manage your rent and utility payments.</p>
+    </div>
+
+    <div class="rounded-2xl border bg-card p-4 shadow-sm md:p-5">
+      <div class="grid gap-3 md:grid-cols-[1.4fr_0.8fr_0.8fr_auto]">
+        <div class="relative">
+          <i
+            data-lucide="search"
+            class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+          ></i>
+          <input
+            id="expense-search"
+            type="search"
+            placeholder="Search by description or type..."
+            class="flex h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+        </div>
+        <select
+          id="expense-status"
+          class="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <option value="all">All statuses</option>
+          <option value="unpaid">Unpaid</option>
+          <option value="paid">Paid</option>
+          <option value="overdue">Overdue</option>
+          <option value="extension">Extension pending</option>
+        </select>
+        <select
+          id="expense-type"
+          class="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <option value="all">All types</option>
+          ${Array.from(new Set(expenses.map((e) => e.invoice.type))).map(
+            (type) => html`<option value="${type}">${type}</option>`,
+          )}
+        </select>
+        <button
+          id="expense-reset"
+          class="inline-flex h-10 items-center justify-center rounded-lg border border-input bg-background px-4 text-sm font-medium hover:bg-accent"
+        >
+          Reset
+        </button>
+      </div>
+
+      <div class="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <span>Quick filters:</span>
+        <button
+          type="button"
+          data-range="7"
+          class="rounded-full border border-input bg-background px-3 py-1 hover:bg-accent"
+        >
+          Due next 7 days
+        </button>
+        <button
+          type="button"
+          data-range="30"
+          class="rounded-full border border-input bg-background px-3 py-1 hover:bg-accent"
+        >
+          Due next 30 days
+        </button>
+        <button
+          type="button"
+          data-range="overdue"
+          class="rounded-full border border-input bg-background px-3 py-1 hover:bg-accent"
+        >
+          Overdue
+        </button>
+      </div>
     </div>
 
     ${expenses.length === 0
@@ -152,8 +228,21 @@ export const ExpensePage = (expenses: ExpenseView[]) => html`
           <h3 class="text-lg font-medium">All caught up!</h3>
           <p class="text-muted-foreground">No pending expenses found.</p>
         </div>`
-      : html`<div class="grid gap-6 md:grid-cols-2">${expenses.map(ExpenseCard)}</div>`}
+      : html`<div class="grid gap-6 md:grid-cols-2" id="expense-grid">
+            ${expenses.map(ExpenseCard)}
+          </div>
+          <div
+            id="expense-empty"
+            class="hidden text-center py-12 bg-muted/20 rounded-lg border border-dashed">
+            <i
+              data-lucide="search-x"
+              class="w-12 h-12 mx-auto text-muted-foreground mb-3"
+            ></i>
+            <h3 class="text-lg font-medium">No matches</h3>
+            <p class="text-muted-foreground">Try adjusting your filters.</p>
+          </div>`}
   </div>
+
 `;
 
 // --- MODALS ---
@@ -206,6 +295,7 @@ export const MarkPaidModal = (paymentId: number, amount: number) => html`
       </form>
     </div>
   </div>
+
 `;
 
 export const RequestExtensionModal = (paymentId: number, dueDate: Date) => html`

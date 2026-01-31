@@ -3,7 +3,7 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", "node_modules", ".wrangler"] },
+  { ignores: ["dist", "node_modules", ".wrangler", "worker-configuration.d.ts"] },
   {
     // 1. Keep standard JS and TypeScript rules
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
@@ -24,6 +24,9 @@ export default tseslint.config(
     rules: {
       "no-console": ["warn", { allow: ["log", "warn", "error"] }],
 
+      "no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": "warn",
+      "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/strict-boolean-expressions": "off",
     },
   },

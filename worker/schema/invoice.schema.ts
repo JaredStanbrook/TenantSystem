@@ -66,6 +66,7 @@ export const invoice = sqliteTable("invoice", {
     .default(sql`(unixepoch())`)
     .notNull(),
   idempotencyKey: text("idempotency_key").unique(),
+  archivedStatus: text("archived_status", { enum: INVOICE_STATUSES }),
 });
 
 // --- Zod Schemas ---

@@ -52,7 +52,7 @@ export function getFlashToast() {
   const ca = decodedCookie.split(";");
 
   for (let i = 0; i < ca.length; i++) {
-    let c = ca[i].trim();
+    const c = ca[i].trim();
     if (c.indexOf(name) === 0) {
       const jsonStr = c.substring(name.length, c.length);
       try {
@@ -60,7 +60,7 @@ export function getFlashToast() {
         // DELETE COOKIE: Set expiry to the past
         document.cookie = "flash-toast=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
         return data.toast; // Returns { message, description, type, etc. }
-      } catch (e) {
+      } catch {
         return null;
       }
     }

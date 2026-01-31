@@ -761,11 +761,20 @@ export const InvoiceRow = ({
   const percentage =
     total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
   const isFullyPaid = paid >= total && total > 0;
+  const searchBlob = `${invoice.description || ""} ${invoice.type} ${propName}`
+    .trim()
+    .toLowerCase();
 
   return html`
     <tr
       class="hover:bg-muted/50 transition-colors border-b"
       id="invoice-row-${invoice.id}"
+      data-title="${searchBlob}"
+      data-status="${invoice.status}"
+      data-type="${invoice.type}"
+      data-property="${propName}"
+      data-paid="${isFullyPaid ? "true" : "false"}"
+      data-due="${new Date(invoice.dueDate).getTime()}"
     >
       <td class="p-4 align-middle">
         <div class="flex flex-col gap-1">
@@ -863,6 +872,10 @@ export const InvoiceTable = ({
   const { page, totalPages } = pagination;
   const hasPrev = page > 1;
   const hasNext = page < totalPages;
+  const propertyNames = Array.from(
+    new Set(properties.map((p) => p.nickname || p.addressLine1).filter(Boolean)),
+  );
+  const invoiceTypes = Array.from(new Set(invoices.map((i) => i.type))).filter(Boolean);
 
   return html`
     <div
@@ -903,6 +916,77 @@ export const InvoiceTable = ({
         </div>
       </div>
 
+      <div class="rounded-2xl border bg-card p-4 shadow-sm md:p-5" id="invoice-filters">
+        <div class="grid gap-3 md:grid-cols-[1.4fr_0.8fr_0.8fr_0.8fr_auto]">
+          <div class="relative">
+            <i
+              data-lucide="search"
+              class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+            ></i>
+            <input
+              id="invoice-search"
+              type="search"
+              placeholder="Search description, property, type..."
+              class="flex h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+          </div>
+          <select
+            id="invoice-status"
+            class="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="all">All statuses</option>
+            ${["draft", "open", "partial", "paid", "overdue", "void"].map(
+              (status) => html`<option value="${status}">${status}</option>`,
+            )}
+          </select>
+          <select
+            id="invoice-type"
+            class="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="all">All types</option>
+            ${invoiceTypes.map((type) => html`<option value="${type}">${type}</option>`)}
+          </select>
+          <select
+            id="invoice-property"
+            class="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="all">All properties</option>
+            ${propertyNames.map((name) => html`<option value="${name}">${name}</option>`)}
+          </select>
+          <button
+            id="invoice-reset"
+            class="inline-flex h-10 items-center justify-center rounded-lg border border-input bg-background px-4 text-sm font-medium hover:bg-accent"
+          >
+            Reset
+          </button>
+        </div>
+
+        <div class="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span>Quick filters:</span>
+          <button
+            type="button"
+            data-range="7"
+            class="rounded-full border border-input bg-background px-3 py-1 hover:bg-accent"
+          >
+            Due next 7 days
+          </button>
+          <button
+            type="button"
+            data-range="30"
+            class="rounded-full border border-input bg-background px-3 py-1 hover:bg-accent"
+          >
+            Due next 30 days
+          </button>
+          <button
+            type="button"
+            data-range="overdue"
+            class="rounded-full border border-input bg-background px-3 py-1 hover:bg-accent"
+          >
+            Overdue
+          </button>
+        </div>
+      </div>
+
       <div class="rounded-lg border bg-card shadow-sm overflow-hidden">
         <div class="relative w-full overflow-auto">
           <table class="w-full caption-bottom text-sm">
@@ -935,7 +1019,7 @@ export const InvoiceTable = ({
                 </th>
               </tr>
             </thead>
-            <tbody class="[&_tr:last-child]:border-0">
+            <tbody class="[&_tr:last-child]:border-0" id="invoice-list">
               ${invoices.length === 0
                 ? html`<tr>
                     <td
@@ -983,5 +1067,6 @@ export const InvoiceTable = ({
         </div>
       </div>
     </div>
+
   `;
 };

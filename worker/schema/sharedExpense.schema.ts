@@ -24,6 +24,7 @@ export const sharedExpense = sqliteTable("shared_expense", {
   purchasedAt: integer("purchased_at", { mode: "timestamp" })
     .default(sql`(unixepoch())`)
     .notNull(),
+  deletedAt: integer("deleted_at", { mode: "timestamp" }),
 });
 
 // 2. The Split (Who owes the Purchaser?)

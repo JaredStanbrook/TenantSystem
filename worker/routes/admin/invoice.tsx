@@ -9,6 +9,7 @@ import {
   count,
   sql,
   getTableColumns,
+  isNull,
 } from "drizzle-orm";
 import { z } from "zod";
 
@@ -150,7 +151,7 @@ invoiceRoute.get("/create", async (c) => {
   const myProperties = await db
     .select()
     .from(property)
-    .where(eq(property.landlordId, userId));
+    .where(and(eq(property.landlordId, userId), isNull(property.deletedAt)));
 
   if (myProperties.length === 0) {
     return c.text("Please create a property first.");
@@ -180,7 +181,11 @@ invoiceRoute.post("/", zValidator("form", formSchema), async (c) => {
       .select()
       .from(property)
       .where(
-        and(eq(property.id, data.propertyId), eq(property.landlordId, userId)),
+        and(
+          eq(property.id, data.propertyId),
+          eq(property.landlordId, userId),
+          isNull(property.deletedAt),
+        ),
       );
 
     if (!prop) return c.text("Unauthorized", 403);
@@ -305,7 +310,7 @@ invoiceRoute.get("/:id/pdf", async (c) => {
   return new Response(pdfBytes, {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename=\"invoice-${inv.invoice.id}.pdf\"`,
+      "Content-Disposition": `attachment; filename="invoice-${inv.invoice.id}.pdf"`,
     },
   });
 });
@@ -623,7 +628,7 @@ invoiceRoute.post("/tenancy/:id/generate", async (c) => {
     });
 
   if (!tenRecord || !tenRecord.property) {
-    htmxToast(c, "Tenancy not found", { type: "error" });
+    flashToast(c, "Tenancy not found", { type: "error" });
     return htmxRedirect(c, "/admin/tenancies");
   }
 
@@ -751,7 +756,9 @@ invoiceRoute.delete("/:id", async (c) => {
     .where(eq(invoicePayment.invoiceId, id));
 
   if (payments.some((p) => p.amountPaid > 0)) {
-    flashToast(c, "Cannot delete invoice with payments", { type: "error" });
+    htmxToast(c, "Cannot delete invoice with payments", {
+      type: "error",
+    });
     return c.text("Invoice has payments", 400);
   }
 
@@ -1027,7 +1034,7 @@ invoiceRoute.post("/generate/:propertyId", async (c) => {
     const [prop] = await db
       .select()
       .from(property)
-      .where(eq(property.id, propertyId));
+      .where(and(eq(property.id, propertyId), isNull(property.deletedAt)));
 
     if (!prop) {
       htmxToast(c, "Property not found", { type: "error" });
@@ -1089,7 +1096,7 @@ invoiceRoute.post("/generate-all", async (c) => {
     const properties = await db
       .select()
       .from(property)
-      .where(eq(property.landlordId, userId));
+      .where(and(eq(property.landlordId, userId), isNull(property.deletedAt)));
 
     if (properties.length === 0) {
       htmxToast(c, "No properties found", { type: "info" });

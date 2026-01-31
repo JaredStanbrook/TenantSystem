@@ -39,6 +39,8 @@
   },
   "include": [
     "worker/**/*",
+    "tests/**/*",
+    "drizzle.config.ts",
     "vite.config.ts",
     "old/db"
   ],

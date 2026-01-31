@@ -1,7 +1,7 @@
 import { jsxRenderer } from "hono/jsx-renderer";
 import { Layout } from "../views/Layout";
 import { getCookie } from "hono/cookie";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { property } from "@server/schema/property.schema";
 
 declare module "hono" {
@@ -18,8 +18,11 @@ export const globalRenderer = jsxRenderer(async ({ children, title }, c) => {
   const cookieId = getCookie(c, "selected_property_id");
   const currentPropertyId = cookieId ? Number(cookieId) : undefined;
 
-  const properties = user
-    ? await db.select().from(property).where(eq(property.landlordId, user.id))
+  const activeProperties = user
+    ? await db
+        .select()
+        .from(property)
+        .where(and(eq(property.landlordId, user.id), isNull(property.deletedAt)))
     : [];
 
   //const currentPath = c.req.path;
@@ -29,7 +32,7 @@ export const globalRenderer = jsxRenderer(async ({ children, title }, c) => {
       title={title || "My App"}
       user={user}
       currentPropertyId={currentPropertyId}
-      properties={properties}
+      properties={activeProperties}
       googleMapsApiKey={c.env.GOOGLE_MAPS_API_KEY}>
       {children}
     </Layout>

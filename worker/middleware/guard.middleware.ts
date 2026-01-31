@@ -2,7 +2,7 @@
 import { createMiddleware } from "hono/factory";
 import type { AppEnv } from "../types"; // Import your Hono Env types
 import { HTTPException } from "hono/http-exception";
-import { htmxRedirect } from "@server/lib/htmx-helpers";
+import { flashToast, htmxRedirect, htmxToast } from "@server/lib/htmx-helpers";
 
 export const requireUser = createMiddleware<AppEnv>(async (c, next) => {
   const user = c.var.auth.user;
@@ -10,11 +10,13 @@ export const requireUser = createMiddleware<AppEnv>(async (c, next) => {
   if (!user) {
     // 1. If it's an HTMX request, we might want to trigger a client-side redirect
     if (c.req.header("HX-Request")) {
+      flashToast(c, "Please sign in to continue", { type: "warning" });
       htmxRedirect(c, "/login");
       return c.text("Redirecting...", 401);
     }
 
     // 2. Standard browser request -> Redirect to login
+    flashToast(c, "Please sign in to continue", { type: "warning" });
     return c.redirect("/login");
   }
 
@@ -29,7 +31,13 @@ export const requireRole = (...allowedRoles: string[]) =>
     const user = c.var.auth.user;
     // 1. Authentication Check
     if (!user) {
-      throw new HTTPException(401, { message: "Authentication required" });
+      if (c.req.header("HX-Request")) {
+        flashToast(c, "Please sign in to continue", { type: "warning" });
+        htmxRedirect(c, "/login");
+        return c.text("Redirecting...", 401);
+      }
+      flashToast(c, "Please sign in to continue", { type: "warning" });
+      return c.redirect("/login");
     }
 
     // 2. Authorization Check (Role)
@@ -39,9 +47,19 @@ export const requireRole = (...allowedRoles: string[]) =>
     if (!hasRole) {
       // It is good security practice to log this unauthorized attempt
       console.warn(
-        `User ${user.id} attempted to access protected route. Required: ${allowedRoles}, Actual: ${user.roles}`
+        `User ${user.id} attempted to access protected route. Required: ${allowedRoles}, Actual: ${user.roles}`,
       );
-      throw new HTTPException(403, { message: "Insufficient permissions" });
+      if (c.req.header("HX-Request")) {
+        flashToast(c, "You do not have permission to access this page", {
+          type: "error",
+        });
+        htmxRedirect(c, "/login");
+        return c.text("Redirecting...", 403);
+      }
+      flashToast(c, "You do not have permission to access this page", {
+        type: "error",
+      });
+      return c.redirect("/login");
     }
 
     await next();
@@ -58,13 +76,29 @@ export const requirePermission = (requiredPermission: string) =>
 
     // 1. Authentication Check
     if (!user) {
-      throw new HTTPException(401, { message: "Authentication required" });
+      if (c.req.header("HX-Request")) {
+        flashToast(c, "Please sign in to continue", { type: "warning" });
+        htmxRedirect(c, "/login");
+        return c.text("Redirecting...", 401);
+      }
+      flashToast(c, "Please sign in to continue", { type: "warning" });
+      return c.redirect("/login");
     }
 
     // 2. Authorization Check (Permission)
     // Your SafeUser object already has the flat array of permissions calculated
     if (!user.permissions.includes(requiredPermission)) {
-      throw new HTTPException(403, { message: "Missing required permission" });
+      if (c.req.header("HX-Request")) {
+        flashToast(c, "You do not have permission to access this page", {
+          type: "error",
+        });
+        htmxRedirect(c, "/login");
+        return c.text("Redirecting...", 403);
+      }
+      flashToast(c, "You do not have permission to access this page", {
+        type: "error",
+      });
+      return c.redirect("/login");
     }
 
     await next();

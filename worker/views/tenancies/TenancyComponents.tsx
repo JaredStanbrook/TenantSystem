@@ -27,7 +27,15 @@ type TenancyView = Tenancy & {
 
 // --- 1. Tenancy Row ---
 export const TenancyRow = ({ t }: { t: TenancyView }) => html`
-  <tr class="hover:bg-muted/50 transition-colors border-b group" id="tenancy-row-${t.id}">
+  <tr
+    class="hover:bg-muted/50 transition-colors border-b group"
+    id="tenancy-row-${t.id}"
+    data-title="${`${t.user.displayName || ""} ${t.user.email || ""} ${
+      t.property.nickname || t.property.addressLine1
+    } ${t.room?.name || ""}`
+      .trim()
+      .toLowerCase()}"
+    data-status="${t.status}">
     <td class="p-4 align-middle">
       <div class="flex items-center gap-3">
         <div
@@ -106,22 +114,6 @@ export const TenancyTable = ({
       </div>
 
       <div class="flex items-center gap-3">
-        <div class="flex items-center space-x-2 bg-card border rounded-md px-3 py-2 shadow-sm">
-          <input
-            type="checkbox"
-            id="showAll"
-            name="showAll"
-            value="true"
-            ${showAll ? "checked" : ""}
-            hx-get="/admin/tenancies?${showAll ? "" : "showAll=true"}"
-            hx-target="#main-content"
-            hx-push-url="true"
-            class="accent-primary w-4 h-4 cursor-pointer" />
-          <label for="showAll" class="text-sm font-medium cursor-pointer select-none">
-            History
-          </label>
-        </div>
-
         <button
           hx-get="/admin/tenancies/create"
           hx-target="#main-content"
@@ -129,6 +121,73 @@ export const TenancyTable = ({
           class="inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 shadow-sm transition-all">
           <i data-lucide="user-plus" class="w-4 h-4"></i>
           New Tenancy
+        </button>
+      </div>
+    </div>
+
+    <div class="rounded-2xl border bg-card p-4 shadow-sm md:p-5" id="tenancy-filters">
+      <div class="grid gap-3 md:grid-cols-[1.4fr_0.8fr_auto_auto]">
+        <div class="relative">
+          <i
+            data-lucide="search"
+            class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+          ></i>
+          <input
+            id="tenancy-search"
+            type="search"
+            placeholder="Search tenant, email, property..."
+            class="flex h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+        </div>
+        <select
+          id="tenancy-status"
+          class="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <option value="all">All statuses</option>
+          ${TENANCY_STATUS_VALUES.map(
+            (status) => html`<option value="${status}">${status.replace("_", " ")}</option>`,
+          )}
+        </select>
+        <label class="flex h-10 items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm">
+          <input
+            type="checkbox"
+            id="tenancy-history"
+            name="showAll"
+            value="true"
+            ${showAll ? "checked" : ""}
+            class="accent-primary h-4 w-4" />
+          History
+        </label>
+        <button
+          id="tenancy-reset"
+          class="inline-flex h-10 items-center justify-center rounded-lg border border-input bg-background px-4 text-sm font-medium hover:bg-accent"
+        >
+          Reset
+        </button>
+      </div>
+
+      <div class="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <span>Quick filters:</span>
+        <button
+          type="button"
+          data-status="active"
+          class="rounded-full border border-input bg-background px-3 py-1 hover:bg-accent"
+        >
+          Active
+        </button>
+        <button
+          type="button"
+          data-status="pending_agreement"
+          class="rounded-full border border-input bg-background px-3 py-1 hover:bg-accent"
+        >
+          Pending
+        </button>
+        <button
+          type="button"
+          data-status="closed"
+          class="rounded-full border border-input bg-background px-3 py-1 hover:bg-accent"
+        >
+          Closed
         </button>
       </div>
     </div>
@@ -170,6 +229,7 @@ export const TenancyTable = ({
       </div>
     </div>
   </div>
+
 `;
 
 // --- 3. Tenancy Form (Enhanced) ---
@@ -381,6 +441,7 @@ export const TenancyForm = ({
         : ""}
     </div>
   </div>
+
 `;
 
 export const TenancyStatusManager = ({

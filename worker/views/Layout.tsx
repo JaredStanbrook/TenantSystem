@@ -22,7 +22,12 @@ export const Layout: FC<LayoutProps> = (props) => {
     <html lang="en">
       <head>
         <meta charset="UTF-8" />
-        <link rel="icon" type="image/svg+xml" href="/house-door.svg" />
+        <link
+          id="app-favicon"
+          rel="icon"
+          type="image/svg+xml"
+          href="/house-door-light.svg"
+        />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>${props.title}</title>
         ${isProd
@@ -30,6 +35,40 @@ export const Layout: FC<LayoutProps> = (props) => {
           : html`<link rel="stylesheet" href="/worker/index.css" />`}
         <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js"></script>
         <script src="https://unpkg.com/lucide@latest"></script>
+        <script>
+          (() => {
+            const favicon = document.getElementById("app-favicon");
+            if (!favicon) return;
+
+            const pickTheme = () => {
+              const root = document.documentElement;
+              if (root.classList.contains("dark") || root.classList.contains("dusk")) {
+                return "dark";
+              }
+              if (root.classList.contains("light") || root.classList.contains("bush")) {
+                return "light";
+              }
+              return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+            };
+
+            const apply = () => {
+              const theme = pickTheme();
+              favicon.setAttribute(
+                "href",
+                theme === "dark" ? "/house-door-dark.svg" : "/house-door-light.svg",
+              );
+            };
+
+            apply();
+            window.addEventListener("theme-change", apply);
+            window
+              .matchMedia("(prefers-color-scheme: dark)")
+              .addEventListener("change", apply);
+
+            const observer = new MutationObserver(apply);
+            observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+          })();
+        </script>
         <script>
           ((g) => {
             var h,
