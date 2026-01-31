@@ -1,12 +1,13 @@
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
-import { eq, and, count, sql, desc, or, lt, gte } from "drizzle-orm";
+import { eq, and, count, sql, desc, or, lt, gte, isNull } from "drizzle-orm";
 import type { AppEnv } from "../../types";
 import { property } from "../../schema/property.schema";
 import { room } from "../../schema/room.schema";
 import { tenancy } from "../../schema/tenancy.schema";
 import { invoice, Invoice } from "../../schema/invoice.schema"; // Ensure Invoice type is exported
 import { Dashboard, DashboardMetrics } from "../../views/admin/Dashboard";
+import { htmxResponse } from "../../lib/htmx-helpers";
 
 export const dashboardRoute = new Hono<AppEnv>();
 
@@ -16,16 +17,22 @@ dashboardRoute.get("/", async (c) => {
 
   // 1. Handle No Property Selected
   if (!cookieId) {
-    return c.render(<Dashboard property={null} metrics={null} />, { title: "Dashboard" });
+    const fragment = <Dashboard property={null} metrics={null} />;
+    return htmxResponse(c, "Dashboard", fragment);
   }
 
   const propertyId = Number(cookieId);
 
   // 2. Fetch Property Details
-  const [prop] = await db.select().from(property).where(eq(property.id, propertyId)).limit(1);
+  const [prop] = await db
+    .select()
+    .from(property)
+    .where(and(eq(property.id, propertyId), isNull(property.deletedAt)))
+    .limit(1);
 
   if (!prop) {
-    return c.render(<Dashboard property={null} metrics={null} />, { title: "Dashboard" });
+    const fragment = <Dashboard property={null} metrics={null} />;
+    return htmxResponse(c, "Dashboard", fragment);
   }
 
   const now = new Date();
@@ -142,7 +149,6 @@ dashboardRoute.get("/", async (c) => {
     dueWindowDays: windowDays,
   };
 
-  return c.render(<Dashboard property={prop} metrics={metrics} />, {
-    title: `${prop.nickname || "Property"} Dashboard`,
-  });
+  const fragment = <Dashboard property={prop} metrics={metrics} />;
+  return htmxResponse(c, `${prop.nickname || "Property"} Dashboard`, fragment);
 });

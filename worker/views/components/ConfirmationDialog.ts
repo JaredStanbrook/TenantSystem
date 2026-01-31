@@ -41,6 +41,7 @@ const styles = {
 export const ConfirmationDialog = (props: ConfirmationDialogProps) => {
   const { title, message, variant = "warning", retryConfig } = props;
   const style = styles[variant];
+  const target = (retryConfig.target || "body").replace(/^['"]|['"]$/g, "");
 
   // Serialize payload for the hx-vals attribute
   const valsString = JSON.stringify(retryConfig.payload);
@@ -82,7 +83,7 @@ export const ConfirmationDialog = (props: ConfirmationDialogProps) => {
                   type="button"
                   ${methodAttribute}="${retryConfig.url}"
                   hx-vals="${valsString}"
-                  hx-target="${retryConfig.target || "body"}"
+                  hx-target="${target}"
                   hx-swap="${retryConfig.swap || "innerHTML"}"
                   hx-on::after-request="document.getElementById('modal-container').innerHTML = ''"
                   class="inline-flex w-full justify-center rounded-md ${style.btnBg} px-3 py-2 text-sm font-semibold text-primary-foreground shadow-sm sm:ml-3 sm:w-auto">

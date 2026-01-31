@@ -1,20 +1,18 @@
-# Professional Portfolio
+# Tenant System
 
-[![CI Pipeline](https://github.com/JaredStanbrook/ProfessionalPortfolio/actions/workflows/ci-pipeline.yml/badge.svg)](https://github.com/JaredStanbrook/ProfessionalPortfolio/actions/workflows/ci-pipeline.yml)
+[![CI](https://github.com/JaredStanbrook/TenantSystem/actions/workflows/ci.yml/badge.svg)](https://github.com/JaredStanbrook/TenantSystem/actions/workflows/ci.yml)
 
-A modern, full-stack portfolio template built with [Hono](https://hono.dev/), [React](https://react.dev/), [Drizzle ORM](https://orm.drizzle.team/), and [Bun](https://bun.sh/).  
-Easily deployable to Cloudflare Workers, with a focus on developer experience, scalability, and performance.
+A full-stack property and tenancy management app built on Cloudflare Workers with Hono SSR (JSX + HTMX), Drizzle ORM, and Bun.
 
 ---
 
 ## 🚀 Features
 
-- **Full-stack:** Hono API routes, React frontend, Drizzle ORM, SQLite (D1)
-- **Modern Tooling:** Bun, Vite, TypeScript, Tailwind CSS, Radix UI, Zod 4 validation
-- **Authentication:** Lucia Auth
-- **Production Ready:** Cloudflare Workers, Wrangler, CI/CD scripts
-- **Developer Experience:** Fast local dev, hot reload, unified config, type safety
-- **Automated Quality:** Husky for automatic linting of commit messages, code, and running tests on commit/push
+- **Full-stack:** Hono routes + SSR JSX, HTMX fragments, Drizzle ORM, SQLite (D1)
+- **Modern Tooling:** Bun, Vite, TypeScript, Tailwind CSS, Zod validation
+- **Auth & Roles:** Built-in auth schema + role/permission scaffolding
+- **Production Ready:** Cloudflare Workers + Wrangler deploy scripts
+- **Developer Experience:** Fast local dev, hot reload, strong type safety
 
 ---
 
@@ -24,7 +22,6 @@ Easily deployable to Cloudflare Workers, with a focus on developer experience, s
 
 - [Bun](https://bun.sh/) (v1.0+)
 - [Wrangler](https://developers.cloudflare.com/workers/wrangler/)
-- [Node.js](https://nodejs.org/) (for some tooling)
 - Cloudflare account (for deployment)
 
 ### Quick Start
@@ -36,10 +33,10 @@ bun install
 # 2. Generate Drizzle tables & Wrangler types
 bun run gen
 
-# 3. Seed local database
+# 3. Apply local database migrations
 bun run migrate:local
 
-# 4. Start local development (client + worker)
+# 4. Start local development (Vite + worker)
 bun dev
 ```
 
@@ -47,18 +44,21 @@ bun dev
 
 ## 🛠️ Scripts
 
-| Script                   | Description                                 |
-| ------------------------ | ------------------------------------------- |
-| `bun dev`                | Start frontend and worker in parallel       |
-| `bun run dev:frontend`   | Start Vite dev server                       |
-| `bun run dev:worker`     | Start Cloudflare Worker locally             |
-| `bun run gen`            | Generate Drizzle ORM types & Wrangler types |
-| `bun run migrate:local`  | Apply local DB migrations                   |
-| `bun run migrate:remote` | Apply remote DB migrations                  |
-| `bun run build:prod`     | Build for production                        |
-| `bun run build:staging`  | Build for staging                           |
-| `bun run lint`           | Run ESLint                                  |
-| `bun run preview`        | Preview production build                    |
+| Script                   | Description                                       |
+| ------------------------ | ------------------------------------------------- |
+| `bun dev`                | Start local dev (Vite + worker)                   |
+| `bun run build`          | Build client + server bundles                     |
+| `bun run build:client`   | Build client bundle                               |
+| `bun run build:server`   | Build worker bundle                               |
+| `bun run typecheck`      | Run TypeScript project checks                     |
+| `bun run lint`           | Run ESLint                                        |
+| `bun test`               | Run Vitest                                        |
+| `bun run gen`            | Generate Drizzle artifacts + Wrangler types       |
+| `bun run migrate:local`  | Apply local D1 migrations                         |
+| `bun run migrate:remote` | Apply remote D1 migrations                        |
+| `bun run deploy:staging` | Migrate + build + deploy to Cloudflare (staging)  |
+| `bun run deploy:prod`    | Migrate + build + deploy to Cloudflare (prod)     |
+| `bun run preview`        | Build + run the worker locally with Wrangler      |
 
 ---
 
@@ -66,66 +66,66 @@ bun dev
 
 ```
 /
-├── src/           # Frontend (React, routes, components)
-├── worker/        # API routes, backend logic (Hono)
-├── drizzle/       # DB migrations & schema
-├── public/        # Static assets
-├── package.json   # Unified scripts & dependencies
-├── tsconfig.*.json# Unified TypeScript configs
-└── wrangler.toml  # Cloudflare Worker config
+├── worker/          # Hono routes, SSR JSX views, HTMX fragments
+├── worker/schema/   # Drizzle + Zod schemas
+├── worker/services/ # Business logic
+├── drizzle/         # D1 migrations + metadata
+├── public/          # Static assets
+├── package.json     # Scripts + deps
+├── tsconfig.json    # TypeScript config
+└── wrangler.jsonc   # Cloudflare Worker config
 ```
 
 ---
 
 ## 🧑‍💻 Development Workflow
 
-- **Unified Dev:** Run `bun dev` to start both frontend and worker with hot reload.
-- **Database:** Use Drizzle ORM for schema and migrations. Seed with SQL files in `drizzle/`.
-- **Type Safety:** All configs and code are TypeScript-first.
-- **Linting:** ESLint with recommended configs for JS/TS/React.
+- **Unified Dev:** `bun dev` starts Vite + worker with hot reload.
+- **Database:** Drizzle ORM for schema + D1 migrations in `drizzle/`.
+- **Type Safety:** TypeScript-first everywhere.
+- **Linting/Testing:** ESLint + Vitest.
 
 ---
 
 ## 🚢 Deployment
 
 > **⚠️ Configuration Required:**  
-> Before running or deploying this project, you must create your own `wrangler.jsonc` file at the project root.
->
-> - Use the provided [`wrangler.jsonc.example`](./wrangler.jsonc.example) as a template.
-> - Replace placeholder values with your own Cloudflare resources:
->   - **D1 Database:** Set your own `database_name`, `database_id`, and `migrations_dir`.
->   - **KV Namespaces:** Add your KV namespace `binding` and `id`.
->   - **R2 Buckets:** Add your R2 `binding` and `bucket_name`.
->   - **Routes:** Update `pattern` and `custom_domain` for your deployment domains.
-> - For more details, see the [Cloudflare Wrangler documentation](https://developers.cloudflare.com/workers/wrangler/configuration/).
+> Create `wrangler.jsonc` from the example and set your Cloudflare bindings (D1/KV/R2) before build or deploy.
 
 **Example:**
 
 ```bash
 cp wrangler.jsonc.example wrangler.jsonc
-# Edit wrangler.jsonc with your Cloudflare D1, KV, and R2 details
+# Edit wrangler.jsonc with your Cloudflare D1/KV/R2 details
 ```
 
 > **Note:**  
-> Your project will not build or deploy until you have configured these Cloudflare resources in `wrangler.jsonc`.
+> The app will not build or deploy until Cloudflare resources are configured.
 
-1. **Create Remote Migrations & Build for production & Deploy to Cloudflare**
+### Environment Variables
+
+Copy `.dev.vars.example` to `.dev.vars` and `.dev.vars.staging` for local/staging settings.
+
+1. **Staging Deploy**
    ```bash
-   bun run build:prod
+   bun run deploy:staging
+   ```
+2. **Production Deploy**
+   ```bash
+   bun run deploy:prod
    ```
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please open issues or pull requests.  
-Follow the [Conventional Commits](https://www.conventionalcommits.org/) style for commit messages.
+Contributions are welcome. Follow Conventional Commits as outlined in `CONTRIBUTING.md`.
 
 ---
 
 ## 📄 License
 
-[MIT](./LICENSE)
+See `LICENSE`.
 
 ---
 

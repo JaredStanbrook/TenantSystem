@@ -46,6 +46,7 @@ export const tenancy = sqliteTable("tenancy", {
     .notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).$onUpdate(() => new Date()),
   billedThroughDate: integer("billed_through_date", { mode: "timestamp" }).notNull(),
+  archivedStatus: text("archived_status", { enum: TENANCY_STATUS_VALUES }),
 });
 
 // --- Zod Schemas ---

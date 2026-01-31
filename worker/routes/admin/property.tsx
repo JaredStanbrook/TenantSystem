@@ -4,17 +4,21 @@ import { getCookie } from "hono/cookie";
 import { zValidator } from "@hono/zod-validator";
 import { property, formPropertySchema } from "@server/schema/property.schema";
 import { room, RoomStatus } from "@server/schema/room.schema";
-import { eq, desc, and } from "drizzle-orm";
+import { invoice } from "@server/schema/invoice.schema";
+import { sharedExpense } from "@server/schema/sharedExpense.schema";
+import { tenancy } from "@server/schema/tenancy.schema";
+import { eq, desc, and, isNull, sql } from "drizzle-orm";
 import {
   PropertyTable,
   PropertyForm,
-  RentReconciliationModal,
+  PropertyRow,
 } from "@views/properties/PropertyComponents";
 import { RoomTable } from "@views/properties/RoomComponents";
 import { htmxResponse, htmxToast, htmxPushUrl } from "@server/lib/htmx-helpers";
 import type { AppEnv } from "@server/types";
 import { PropertySelector } from "@views/components/NavBar";
 import { SelectionDialog } from "@server/views/components/SelectionDialog";
+import { ConfirmationDialog } from "@views/components/ConfirmationDialog";
 import { currencyConvertor } from "@server/lib/utils";
 import { addDays, addMonths } from "date-fns";
 
@@ -24,13 +28,19 @@ export const propertyRoute = new Hono<AppEnv>();
 propertyRoute.get("/", async (c) => {
   const db = c.var.db;
   const userId = c.var.auth.user!.id;
+  const showAll = c.req.query("showAll") === "true";
 
   const properties = await db
     .select()
     .from(property)
-    .where(eq(property.landlordId, userId))
+    .where(
+      showAll
+        ? eq(property.landlordId, userId)
+        : and(eq(property.landlordId, userId), isNull(property.deletedAt)),
+    )
     .orderBy(desc(property.createdAt));
-  const fragment = PropertyTable({ properties });
+  htmxPushUrl(c, c.req.url);
+  const fragment = PropertyTable({ properties, showAll });
   return htmxResponse(c, "My Properties", fragment);
 });
 propertyRoute.get("/:propId/rooms", async (c) => {
@@ -42,17 +52,30 @@ propertyRoute.get("/:propId/rooms", async (c) => {
   const [prop] = await db
     .select()
     .from(property)
-    .where(and(eq(property.id, propId), eq(property.landlordId, userId)));
+    .where(
+      and(
+        eq(property.id, propId),
+        eq(property.landlordId, userId),
+        isNull(property.deletedAt),
+      ),
+    );
 
   if (!prop) return c.text("Unauthorized or Not Found", 404);
 
   // Fetch Rooms
-  const rooms = await db.select().from(room).where(eq(room.propertyId, propId));
+  const rooms = await db
+    .select()
+    .from(room)
+    .where(and(eq(room.propertyId, propId), isNull(room.deletedAt)));
 
   return htmxResponse(
     c,
     `${prop.nickname || "Property"} Rooms`,
-    RoomTable({ rooms, propertyName: prop.nickname || prop.addressLine1, propertyId: propId }),
+    RoomTable({
+      rooms,
+      propertyName: prop.nickname || prop.addressLine1,
+      propertyId: propId,
+    }),
   );
 });
 
@@ -142,7 +165,7 @@ propertyRoute.post(
     const properties = await db
       .select()
       .from(property)
-      .where(eq(property.landlordId, userId))
+      .where(and(eq(property.landlordId, userId), isNull(property.deletedAt)))
       .orderBy(desc(property.createdAt));
 
     const selectedPropertyId = getCookie(c, "selected_property_id");
@@ -157,7 +180,9 @@ propertyRoute.post(
       <div hx-swap-oob="outerHTML:#nav-property-selector">
         ${PropertySelector({
           properties,
-          currentPropertyId: selectedPropertyId ? Number(selectedPropertyId) : undefined,
+          currentPropertyId: selectedPropertyId
+            ? Number(selectedPropertyId)
+            : undefined,
         })}
       </div>
     `);
@@ -170,7 +195,10 @@ propertyRoute.get("/:id/edit", async (c) => {
   const id = Number(c.req.param("id"));
   const userId = c.var.auth.user!.id;
 
-  const [prop] = await db.select().from(property).where(eq(property.id, id));
+  const [prop] = await db
+    .select()
+    .from(property)
+    .where(and(eq(property.id, id), isNull(property.deletedAt)));
   if (!prop || prop.landlordId !== userId) {
     htmxToast(c, "Unauthorized Access", { type: "error" });
     return c.text("Unauthorized", 401);
@@ -215,15 +243,19 @@ propertyRoute.post(
     const data = c.req.valid("form");
     const userId = c.var.auth.user!.id;
 
-    const currentRooms = await db.select().from(room).where(eq(room.propertyId, id));
+    const currentRooms = await db
+      .select()
+      .from(room)
+      .where(eq(room.propertyId, id));
 
     const existing = await db
       .select()
       .from(property)
-      .where(eq(property.id, id))
+      .where(and(eq(property.id, id), isNull(property.deletedAt)))
       .then((res) => res[0]);
 
-    if (!existing || existing.landlordId !== userId) return c.text("Unauthorized", 401);
+    if (!existing || existing.landlordId !== userId)
+      return c.text("Unauthorized", 401);
 
     const currentCount = currentRooms.length;
     const targetCount = data.bedrooms;
@@ -255,7 +287,8 @@ propertyRoute.post(
             {
               label: "Preserve Individual Room Rates",
               value: "preserve_room_rates",
-              description: "Keep existing room prices. Property rent updates automatically.",
+              description:
+                "Keep existing room prices. Property rent updates automatically.",
               icon: "lock",
               target: "#main-content",
             },
@@ -295,7 +328,10 @@ propertyRoute.post(
     if (data.rentStrategy === "preserve_room_rates") {
       // STRATEGY A: Sum of Kept Rooms = New Property Price
       // New rooms (if any) start at 0
-      const sumKept = roomsToKeep.reduce((sum, r) => sum + (r.baseRentAmount || 0), 0);
+      const sumKept = roomsToKeep.reduce(
+        (sum, r) => sum + (r.baseRentAmount || 0),
+        0,
+      );
       finalPropertyRent = sumKept;
       newRoomBaseRent = 0;
     } else if (data.rentStrategy === "distribute_property_rent") {
@@ -308,7 +344,10 @@ propertyRoute.post(
       // Update ALL kept rooms to be even
       for (const r of roomsToKeep) {
         batchOperations.push(
-          db.update(room).set({ baseRentAmount: newRoomBaseRent }).where(eq(room.id, r.id)),
+          db
+            .update(room)
+            .set({ baseRentAmount: newRoomBaseRent })
+            .where(eq(room.id, r.id)),
         );
       }
     }
@@ -340,7 +379,9 @@ propertyRoute.post(
     // Remove Rooms
     for (const r of roomsToRemove) {
       if (r.status !== "vacant_ready") {
-        htmxToast(c, `Cannot remove ${r.name}: Status is ${r.status}`, { type: "error" });
+        htmxToast(c, `Cannot remove ${r.name}: Status is ${r.status}`, {
+          type: "error",
+        });
         return c.status(400);
       }
       batchOperations.push(db.delete(room).where(eq(room.id, r.id)));
@@ -353,7 +394,7 @@ propertyRoute.post(
     const properties = await db
       .select()
       .from(property)
-      .where(eq(property.landlordId, userId))
+      .where(and(eq(property.landlordId, userId), isNull(property.deletedAt)))
       .orderBy(desc(property.createdAt));
 
     const selectedPropertyId = getCookie(c, "selected_property_id");
@@ -366,7 +407,9 @@ propertyRoute.post(
       <div hx-swap-oob="outerHTML:#nav-property-selector">
         ${PropertySelector({
           properties,
-          currentPropertyId: selectedPropertyId ? Number(selectedPropertyId) : undefined,
+          currentPropertyId: selectedPropertyId
+            ? Number(selectedPropertyId)
+            : undefined,
         })}
       </div>
 
@@ -380,18 +423,193 @@ propertyRoute.delete("/:id", async (c) => {
   const db = c.var.db;
   const id = Number(c.req.param("id"));
   const userId = c.var.auth.user!.id;
+  const body = await c.req.parseBody();
+  const forceQuery = c.req.query("force");
+  const archiveConfirmQuery = c.req.query("archiveConfirm");
+  const showAllQuery = c.req.query("showAll");
+  const force = body.force === "true" || forceQuery === "true";
+  const archiveConfirm =
+    body.archiveConfirm === "true" || archiveConfirmQuery === "true";
+  const showAll =
+    body.showAll === "true" || showAllQuery === "true";
+  console.log(force);
+  const [existing] = await db
+    .select()
+    .from(property)
+    .where(eq(property.id, id));
+
+  if (!existing || existing.landlordId !== userId)
+    return c.text("Unauthorized", 401);
+
+  if (!existing.deletedAt && !archiveConfirm) {
+    return c.html(
+      html`
+        ${PropertyRow({
+          prop: existing,
+          showAll,
+        })}
+        ${ConfirmationDialog({
+          title: "Archive this property?",
+          message:
+            "Archiving will hide this property and archive related records. You can restore it later.",
+          variant: "warning",
+          retryConfig: {
+            url: `/admin/properties/${id}?archiveConfirm=true${showAll ? "&showAll=true" : ""}`,
+            method: "delete",
+            target: `#row-${id}`,
+            swap: "outerHTML swap:0.5s",
+            payload: {
+              archiveConfirm: true,
+            },
+          },
+        })}
+      `,
+      409,
+    );
+  }
+
+  if (existing.deletedAt && !force) {
+    return c.html(
+      html`
+        ${PropertyRow({
+          prop: existing,
+          showAll: true,
+        })}
+        ${ConfirmationDialog({
+          title: "Permanently delete property?",
+          message:
+            "This will permanently remove the property and all related records (rooms, tenancies, invoices, expenses). This action cannot be undone.",
+          variant: "destructive",
+          retryConfig: {
+            url: `/admin/properties/${id}?force=true&showAll=true`,
+            method: "delete",
+            target: `#row-${id}`,
+            swap: "outerHTML swap:0.5s",
+            payload: {
+              force: true,
+              showAll: true,
+            },
+          },
+        })}
+      `,
+      409,
+    );
+  }
+
+  if (!existing.deletedAt) {
+    const now = new Date();
+    await db.batch([
+      db
+        .update(property)
+        .set({ deletedAt: now, updatedAt: now })
+        .where(eq(property.id, id)),
+      db.update(room).set({ deletedAt: now }).where(eq(room.propertyId, id)),
+      db
+        .update(sharedExpense)
+        .set({ deletedAt: now })
+        .where(eq(sharedExpense.propertyId, id)),
+      db
+        .update(invoice)
+        .set({
+          archivedStatus: sql`coalesce(${invoice.archivedStatus}, ${invoice.status})`,
+          status: "void",
+        })
+        .where(eq(invoice.propertyId, id)),
+      db
+        .update(tenancy)
+        .set({
+          archivedStatus: sql`coalesce(${tenancy.archivedStatus}, ${tenancy.status})`,
+          status: "closed",
+        })
+        .where(eq(tenancy.propertyId, id)),
+    ]);
+  } else {
+    await db.batch([
+      db.delete(tenancy).where(eq(tenancy.propertyId, id)),
+      db.delete(invoice).where(eq(invoice.propertyId, id)),
+      db.delete(sharedExpense).where(eq(sharedExpense.propertyId, id)),
+      db.delete(room).where(eq(room.propertyId, id)),
+      db.delete(property).where(eq(property.id, id)),
+    ]);
+  }
+
+  const properties = await db
+    .select()
+    .from(property)
+    .where(and(eq(property.landlordId, userId), isNull(property.deletedAt)));
+  const selectedPropertyId = getCookie(c, "selected_property_id");
+
+  htmxToast(c, existing.deletedAt ? "Property Deleted" : "Property Archived", {
+    type: "info",
+  });
+  return c.html(html`
+    ${showAll && !existing.deletedAt
+      ? PropertyRow({
+          prop: { ...existing, deletedAt: new Date() },
+          showAll: true,
+        })
+      : ""}
+    <div hx-swap-oob="outerHTML:#nav-property-selector">
+      ${PropertySelector({
+        properties,
+        currentPropertyId: selectedPropertyId
+          ? Number(selectedPropertyId)
+          : undefined,
+      })}
+    </div>
+  `);
+});
+
+// 7. POST /admin/properties/:id/restore -> Restore Archived Property
+propertyRoute.post("/:id/restore", async (c) => {
+  const db = c.var.db;
+  const id = Number(c.req.param("id"));
+  const userId = c.var.auth.user!.id;
+  const showAll = c.req.query("showAll") === "true";
 
   const [existing] = await db.select().from(property).where(eq(property.id, id));
 
   if (!existing || existing.landlordId !== userId) return c.text("Unauthorized", 401);
 
-  await db.delete(property).where(eq(property.id, id));
+  await db.batch([
+    db
+      .update(property)
+      .set({ deletedAt: null, updatedAt: new Date() })
+      .where(eq(property.id, id)),
+    db.update(room).set({ deletedAt: null }).where(eq(room.propertyId, id)),
+    db
+      .update(sharedExpense)
+      .set({ deletedAt: null })
+      .where(eq(sharedExpense.propertyId, id)),
+    db
+      .update(invoice)
+      .set({
+        status: sql`coalesce(${invoice.archivedStatus}, ${invoice.status})`,
+        archivedStatus: null,
+      })
+      .where(eq(invoice.propertyId, id)),
+    db
+      .update(tenancy)
+      .set({
+        status: sql`coalesce(${tenancy.archivedStatus}, ${tenancy.status})`,
+        archivedStatus: null,
+      })
+      .where(eq(tenancy.propertyId, id)),
+  ]);
 
-  const properties = await db.select().from(property).where(eq(property.landlordId, userId));
+  const properties = await db
+    .select()
+    .from(property)
+    .where(and(eq(property.landlordId, userId), isNull(property.deletedAt)));
   const selectedPropertyId = getCookie(c, "selected_property_id");
 
-  htmxToast(c, "Property Deleted", { type: "info" });
+  htmxToast(c, "Property Restored", { type: "success" });
   return c.html(html`
+    ${PropertyRow({
+      prop: { ...existing, deletedAt: null },
+      showAll,
+    })}
+
     <div hx-swap-oob="outerHTML:#nav-property-selector">
       ${PropertySelector({
         properties,

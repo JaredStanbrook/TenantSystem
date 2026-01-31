@@ -31,6 +31,7 @@ export const room = sqliteTable("room", {
     .notNull(),
 
   baseRentAmount: integer("base_rent_amount").notNull(), // Default rent for this specific room
+  deletedAt: integer("deleted_at", { mode: "timestamp" }),
 });
 
 export const insertRoomSchema = createInsertSchema(room);

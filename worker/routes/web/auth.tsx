@@ -5,7 +5,7 @@ import { Home } from "@server/views/pages/Home";
 import { Login } from "@server/views/pages/Login";
 import { Register } from "@server/views/pages/Register";
 import type { AppEnv } from "../../types";
-import { htmxRedirect, htmxToast } from "@server/lib/htmx-helpers";
+import { flashToast, htmxRedirect } from "@server/lib/htmx-helpers";
 
 export const webAuth = new Hono<AppEnv>();
 
@@ -47,7 +47,7 @@ webAuth.post("/web/auth/logout", async (c) => {
   const { auth } = c.var;
   auth.destroySession();
 
-  htmxToast(c, "Logged out successfully", {
+  flashToast(c, "Logged out successfully", {
     type: "success",
   });
   htmxRedirect(c, "/login");

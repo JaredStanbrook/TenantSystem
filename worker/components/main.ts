@@ -78,11 +78,12 @@ document.body.addEventListener("htmx:responseError", (evt: any) => {
       new CustomEvent("toast", {
         detail: {
           message: "Something went wrong",
-          description: "Please try again or contact support if the problem persists.",
+          description:
+            "Please try again or contact support if the problem persists.",
           type: "error",
           duration: 5000,
         },
-      })
+      }),
     );
   }
 });
@@ -112,3 +113,12 @@ document.addEventListener("click", (event) => {
     }
   });
 });
+
+const initPageModules = () => {
+  import("./ui/PropertyFilters");
+  import("./ui/TenancyFilters");
+  import("./ui/InvoiceFilters");
+  import("./ui/ExpenseFilters");
+};
+
+document.addEventListener("DOMContentLoaded", initPageModules);

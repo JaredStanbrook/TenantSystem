@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { eq, desc, and, ne, inArray, or } from "drizzle-orm";
+import { eq, desc, and, ne, inArray, or, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { TenancyService } from "@server/services/tenancy.service";
 import { ConfirmationDialog } from "@views/components/ConfirmationDialog";
@@ -15,7 +15,13 @@ import { room } from "@server/schema/room.schema"; // Import Room
 import { users } from "@server/schema/auth.schema";
 import { TenancyTable, TenancyForm } from "@views/tenancies/TenancyComponents";
 import { TENANCY_STATUS_VALUES } from "@server/schema/tenancy.schema";
-import { htmxResponse, htmxToast, htmxRedirect, flashToast } from "@server/lib/htmx-helpers";
+import {
+  htmxResponse,
+  htmxToast,
+  htmxRedirect,
+  flashToast,
+  htmxPushUrl,
+} from "@server/lib/htmx-helpers";
 import type { AppEnv } from "@server/types";
 import { getCookie } from "hono/cookie";
 import { html } from "hono/html"; // For the OOB/Partial helpers
@@ -85,6 +91,7 @@ tenancyRoute.get("/", async (c) => {
     property: r.property,
     room: r.room, // Pass room to the table
   }));
+  htmxPushUrl(c, c.req.url);
   return htmxResponse(c, "Tenancies", TenancyTable({ tenancies, showAll }));
 });
 
@@ -94,7 +101,10 @@ tenancyRoute.get("/create", async (c) => {
   const userId = c.var.auth.user!.id;
   const selectedPropCookie = getCookie(c, "selected_property_id");
 
-  const myProperties = await db.select().from(property).where(eq(property.landlordId, userId));
+  const myProperties = await db
+    .select()
+    .from(property)
+    .where(and(eq(property.landlordId, userId), isNull(property.deletedAt)));
 
   if (myProperties.length === 0) {
     htmxToast(c, "No Properties Found", {
@@ -114,6 +124,7 @@ tenancyRoute.get("/create", async (c) => {
         and(
           eq(room.propertyId, Number(selectedPropCookie)),
           or(eq(room.status, "vacant_ready"), eq(room.status, "advertised")),
+          isNull(room.deletedAt),
         ),
       );
   }
@@ -172,7 +183,7 @@ tenancyRoute.post("/", zValidator("form", createTenancyFormSchema), async (c) =>
     const myProperties = await db
       .select()
       .from(property)
-      .where(eq(property.landlordId, landlordId));
+      .where(and(eq(property.landlordId, landlordId), isNull(property.deletedAt)));
 
     // Re-fetch rooms if property was selected
     const currentRooms = await db
@@ -182,6 +193,7 @@ tenancyRoute.post("/", zValidator("form", createTenancyFormSchema), async (c) =>
         and(
           eq(room.propertyId, data.propertyId),
           or(eq(room.status, "vacant_ready"), eq(room.status, "advertised")),
+          isNull(room.deletedAt),
         ),
       );
 
@@ -206,7 +218,13 @@ tenancyRoute.post("/", zValidator("form", createTenancyFormSchema), async (c) =>
     const [prop] = await db
       .select()
       .from(property)
-      .where(and(eq(property.id, data.propertyId), eq(property.landlordId, landlordId)));
+      .where(
+        and(
+          eq(property.id, data.propertyId),
+          eq(property.landlordId, landlordId),
+          isNull(property.deletedAt),
+        ),
+      );
 
     if (!prop) return c.text("Unauthorized property", 403);
 
@@ -333,14 +351,17 @@ tenancyRoute.get("/:id/edit", async (c) => {
 
   if (!record || record.p.landlordId !== landlordId) return c.text("Unauthorized", 403);
 
-  const myProperties = await db.select().from(property).where(eq(property.landlordId, landlordId));
+  const myProperties = await db
+    .select()
+    .from(property)
+    .where(and(eq(property.landlordId, landlordId), isNull(property.deletedAt)));
 
   // Fetch rooms for this property
   // We need the CURRENT room (even if occupied) + any VACANT rooms
   const propertyRooms = await db
     .select()
     .from(room)
-    .where(eq(room.propertyId, record.t.propertyId));
+    .where(and(eq(room.propertyId, record.t.propertyId), isNull(room.deletedAt)));
 
   const validRooms = propertyRooms.filter(
     (r) =>

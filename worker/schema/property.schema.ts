@@ -53,6 +53,7 @@ export const property = sqliteTable("property", {
     .notNull()
     .$onUpdate(() => new Date()),
   nextBillingDate: integer("next_billing_date", { mode: "timestamp" }),
+  deletedAt: integer("deleted_at", { mode: "timestamp" }),
 });
 
 // --- 2. Zod Schemas for Validation ---
@@ -74,6 +75,7 @@ export const formPropertySchema = insertPropertySchema
     landlordId: true,
     createdAt: true,
     updatedAt: true,
+    deletedAt: true,
   })
   .extend({
     rentAmount: z.coerce.number().min(0, "Rent must be a positive number"),
