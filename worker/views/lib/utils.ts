@@ -4,14 +4,38 @@ export const capitalize = (str: string): string => {
   if (!str) return "";
   return str.charAt(0).toUpperCase() + str.slice(1);
 };
+
+const currencyFormatter = new Intl.NumberFormat("en-AU", {
+  style: "currency",
+  currency: "AUD",
+  minimumFractionDigits: 2,
+});
+
+export const formatDateShort = (date: Date | string | number) => {
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toLocaleDateString("en-AU", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+};
+
+export const formatDateCompact = (date: Date | string | number) => {
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toLocaleDateString("en-AU", {
+    month: "short",
+    day: "numeric",
+  });
+};
 export const formatCentsToDollars = (cents: number | undefined | null): string => {
   if (cents === undefined || cents === null) return "";
-  const dollars = cents / 100;
-  return `$${dollars.toFixed(2)}`;
+  return currencyFormatter.format(cents / 100);
 };
 export const formatCents = (cents: number | undefined | null): string => {
-  if (cents === undefined || cents === null) return "$0.00";
-  return `$${(cents / 100).toFixed(2)}`;
+  if (cents === undefined || cents === null) return currencyFormatter.format(0);
+  return currencyFormatter.format(cents / 100);
 };
 export const dollarsToCents = (value: string | number | undefined | null): number => {
   if (value === undefined || value === null || value === "") return 0;

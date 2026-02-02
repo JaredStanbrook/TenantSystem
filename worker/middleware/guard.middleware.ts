@@ -1,8 +1,7 @@
 // worker/middleware/guard.middleware.ts
 import { createMiddleware } from "hono/factory";
 import type { AppEnv } from "../types"; // Import your Hono Env types
-import { HTTPException } from "hono/http-exception";
-import { flashToast, htmxRedirect, htmxToast } from "@server/lib/htmx-helpers";
+import { flashToast, htmxRedirect } from "@server/lib/htmx-helpers";
 
 export const requireUser = createMiddleware<AppEnv>(async (c, next) => {
   const user = c.var.auth.user;

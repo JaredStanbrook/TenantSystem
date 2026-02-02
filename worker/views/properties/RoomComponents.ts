@@ -46,11 +46,9 @@ export const RoomRow = ({ room }: { room: SafeRoom & { baseRentAmount?: number |
 export const RoomTable = ({
   rooms,
   propertyName,
-  propertyId,
 }: {
   rooms: any[];
   propertyName: string;
-  propertyId: number;
 }) => html`
   <div class="max-w-7xl mx-auto space-y-8 p-8 pt-20 animate-in fade-in duration-500">
     <div class="flex items-center justify-between">

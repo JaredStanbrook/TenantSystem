@@ -13,6 +13,7 @@ A full-stack property and tenancy management app built on Cloudflare Workers wit
 - **Auth & Roles:** Built-in auth schema + role/permission scaffolding
 - **Production Ready:** Cloudflare Workers + Wrangler deploy scripts
 - **Developer Experience:** Fast local dev, hot reload, strong type safety
+- **Tenant Portal:** Expenses view with extensions and payment confirmations
 
 ---
 
@@ -21,6 +22,7 @@ A full-stack property and tenancy management app built on Cloudflare Workers wit
 ### Prerequisites
 
 - [Bun](https://bun.sh/) (v1.0+)
+- Node.js 20.x (see `.node-version`)
 - [Wrangler](https://developers.cloudflare.com/workers/wrangler/)
 - Cloudflare account (for deployment)
 
@@ -30,13 +32,16 @@ A full-stack property and tenancy management app built on Cloudflare Workers wit
 # 1. Install dependencies
 bun install
 
-# 2. Generate Drizzle tables & Wrangler types
+# 2. Copy environment config
+cp .env.example .env
+
+# 3. Generate Drizzle tables & Wrangler types
 bun run gen
 
-# 3. Apply local database migrations
+# 4. Apply local database migrations
 bun run migrate:local
 
-# 4. Start local development (Vite + worker)
+# 5. Start local development (Vite + worker)
 bun dev
 ```
 
@@ -52,13 +57,24 @@ bun dev
 | `bun run build:server`   | Build worker bundle                               |
 | `bun run typecheck`      | Run TypeScript project checks                     |
 | `bun run lint`           | Run ESLint                                        |
+| `bun run format`         | Check formatting (Prettier)                       |
 | `bun test`               | Run Vitest                                        |
 | `bun run gen`            | Generate Drizzle artifacts + Wrangler types       |
 | `bun run migrate:local`  | Apply local D1 migrations                         |
 | `bun run migrate:remote` | Apply remote D1 migrations                        |
+| `bun run create-admin`   | Create or update an admin user (see options)      |
+| `bun run create-admin:local` | Create admin user against local D1            |
+| `bun run create-admin:remote` | Create admin user against remote D1          |
 | `bun run deploy:staging` | Migrate + build + deploy to Cloudflare (staging)  |
 | `bun run deploy:prod`    | Migrate + build + deploy to Cloudflare (prod)     |
 | `bun run preview`        | Build + run the worker locally with Wrangler      |
+
+Example create-admin usage:
+
+```bash
+bun run create-admin --email you@domain.com --password "Secret123!" --local
+bun run create-admin --email you@domain.com --password "Secret123!" --remote
+```
 
 ---
 
@@ -83,28 +99,36 @@ bun dev
 - **Unified Dev:** `bun dev` starts Vite + worker with hot reload.
 - **Database:** Drizzle ORM for schema + D1 migrations in `drizzle/`.
 - **Type Safety:** TypeScript-first everywhere.
-- **Linting/Testing:** ESLint + Vitest.
+- **Linting/Testing:** ESLint + Prettier + Vitest.
+
+---
+
+## 👤 Admin Bootstrap
+
+Create your first admin user locally or against a remote D1 database:
+
+```bash
+bun run create-admin --email you@domain.com --password "Secret123!" --local
+bun run create-admin --email you@domain.com --password "Secret123!" --remote
+```
 
 ---
 
 ## 🚢 Deployment
 
 > **⚠️ Configuration Required:**  
-> Create `wrangler.jsonc` from the example and set your Cloudflare bindings (D1/KV/R2) before build or deploy.
-
-**Example:**
-
-```bash
-cp wrangler.jsonc.example wrangler.jsonc
-# Edit wrangler.jsonc with your Cloudflare D1/KV/R2 details
-```
+> Update `wrangler.jsonc` with your Cloudflare bindings (D1/KV/R2) before build or deploy.
 
 > **Note:**  
 > The app will not build or deploy until Cloudflare resources are configured.
 
 ### Environment Variables
 
-Copy `.dev.vars.example` to `.dev.vars` and `.dev.vars.staging` for local/staging settings.
+Start with `.env.example` for local values and use `wrangler secret put` for production secrets.
+
+Required values:
+- `JWT_SECRET`
+- `GOOGLE_MAPS_API_KEY` (if address autocomplete is used)
 
 1. **Staging Deploy**
    ```bash
@@ -114,6 +138,35 @@ Copy `.dev.vars.example` to `.dev.vars` and `.dev.vars.staging` for local/stagin
    ```bash
    bun run deploy:prod
    ```
+
+---
+
+## 🧪 Demo / Seed Data (for screenshots)
+
+1. Create an admin user (`bun run create-admin --email ... --local`).
+2. Log in and add a property.
+3. Add rooms and a tenancy.
+4. Generate invoices from the Invoices screen.
+5. Use the Admin Tools page to void legacy overdue invoices if needed.
+
+---
+
+## 🔐 Auth & Access Notes
+
+- Landlord/admin routes live under `/admin` and are role-guarded.
+- Tenant experiences live under `/expense` and `/bill`.
+- If you customize roles, update `ROLES_AVAILABLE` and `ROLES_INHERENT` accordingly.
+
+---
+
+## 🏷️ Release
+
+Tag a release after merging to `main`:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
 
 ---
 

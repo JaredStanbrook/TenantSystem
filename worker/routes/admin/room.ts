@@ -1,10 +1,10 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { room } from "@server/schema/room.schema";
 import { property } from "@server/schema/property.schema";
-import { RoomTable, RoomForm } from "@views/properties/RoomComponents";
+import { RoomForm } from "@views/properties/RoomComponents";
 import { htmxResponse, htmxToast } from "@server/lib/htmx-helpers";
 import { currencyConvertor } from "@server/lib/utils";
 import type { AppEnv } from "@server/types";

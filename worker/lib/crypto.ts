@@ -106,7 +106,7 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 
     // Constant-time comparison
     return constantTimeEqual(actualHashB64, expectedHashB64);
-  } catch (error) {
+  } catch {
     return false;
   }
 }

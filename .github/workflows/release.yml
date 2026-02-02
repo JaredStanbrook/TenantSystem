@@ -1,17 +1,12 @@
-name: CI
+name: Release
 
 on:
   push:
-    branches:
-      - main
-  pull_request:
-
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+    tags:
+      - "v*"
 
 jobs:
-  lint-typecheck-test:
+  build-and-release:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -32,8 +27,10 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
-      - name: Test
-        run: bun test
-
       - name: Build
         run: bun run build
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true

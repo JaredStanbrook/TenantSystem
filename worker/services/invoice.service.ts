@@ -9,7 +9,7 @@ import {
   isBefore,
 } from "date-fns";
 
-import { eq, and, sql, ne } from "drizzle-orm";
+import { eq, and, sql, ne, inArray } from "drizzle-orm";
 import {
   invoice,
   INVOICE_STATUSES,
@@ -294,7 +294,13 @@ export const InvoiceService = {
         dueDate: invoice.dueDate,
       })
       .from(invoice)
-      .where(and(ne(invoice.status, "paid"), ne(invoice.status, "void")));
+      .where(
+        and(
+          ne(invoice.status, "paid"),
+          ne(invoice.status, "void"),
+          inArray(invoice.propertyId, propertyIds),
+        ),
+      );
 
     const now = new Date();
     for (const inv of openInvoices) {
@@ -639,6 +645,7 @@ export const InvoiceService = {
               .update(invoice)
               .set({
                 totalAmount: existingInvoice.totalAmount + missingTotal,
+                description: nextDescription,
               })
               .where(eq(invoice.id, existingInvoice.id)),
           ]);

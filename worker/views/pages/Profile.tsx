@@ -1,9 +1,9 @@
 import type { FC } from "hono/jsx";
 import type { SafeUser } from "../../schema/auth.schema";
 import { Icon } from "../components/Icon";
-import { User, BadgeX, BadgeCheck } from "lucide";
+import { User } from "lucide";
 import { type AuthConfig } from "@server/config/auth.config";
-import { capitalize, StatusBadge } from "../lib/utils";
+import { StatusBadge } from "../lib/utils";
 
 const styles: Record<string, string> = {
   tenant: "bg-blue-100 text-blue-800 border-blue-200",
@@ -20,7 +20,7 @@ export const ProfilePage: FC<ProfileProps> = (props) => {
   // Helper for dates
   const formatDate = (dateString?: string) => {
     if (!dateString) return "Never";
-    return new Date(dateString).toLocaleDateString("en-US", {
+    return new Date(dateString).toLocaleDateString("en-AU", {
       year: "numeric",
       month: "long",
       day: "numeric",

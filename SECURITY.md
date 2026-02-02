@@ -28,6 +28,21 @@ If you discover a security vulnerability, please follow these steps:
 4. **Disclosure:**  
    Once the vulnerability is resolved, we will coordinate with you to disclose the issue responsibly.
 
+## In Scope
+
+- Authentication and authorization bypasses
+- Data exposure, IDORs, and access control flaws
+- Payment/invoice workflow integrity issues
+- Token/session handling and CSRF issues
+- Configuration or deployment mistakes that expose data
+
+## Out of Scope
+
+- Social engineering
+- Denial of service without a clear impact path
+- Physical attacks
+- Third-party service vulnerabilities outside this repository
+
 ## Security Updates
 
 We recommend always using the latest version of this project to ensure you have the most recent security updates.

@@ -15,7 +15,10 @@ const menuConfig: Record<string, Array<{ to: string; name: string }>> = {
     { to: "/admin/invoices", name: "Invoices" },
     { to: "/admin/properties", name: "Properties" },
   ],
-  admin: [{ to: "/admin/logs", name: "System Logs" }],
+  admin: [
+    { to: "/admin/tools", name: "Admin Tools" },
+    { to: "/admin/logs", name: "System Logs" },
+  ],
 };
 
 const ROLES_WITH_SELECTOR = new Set(["landlord", "admin"]);

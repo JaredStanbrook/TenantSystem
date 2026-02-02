@@ -1,7 +1,6 @@
 import { Context } from "hono";
 import type { HtmlEscapedString } from "hono/utils/html";
 import { setCookie } from "hono/cookie";
-import { set } from "zod";
 
 type Renderable = string | HtmlEscapedString | Promise<HtmlEscapedString>;
 /**

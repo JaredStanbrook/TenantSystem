@@ -229,7 +229,7 @@ export class AuthRegister extends LitElement {
 
       // 3. Verify
       const verRes = await api.auth.passkey.register.verify.$post({
-        json: { email, response: attResp, challengeId: options.challengeId },
+        json: { email, role, response: attResp, challengeId: options.challengeId },
       });
 
       if (!verRes.ok) throw new Error(await getErrorMessage(verRes));

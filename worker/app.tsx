@@ -18,6 +18,7 @@ import { invoiceRoute } from "./routes/admin/invoice.tsx";
 import { tenancyRoute } from "./routes/admin/tenancy.tsx";
 import { roomRoute } from "./routes/admin/room.ts";
 import { dashboardRoute } from "./routes/admin/dashboard.tsx";
+import { adminToolsRoute } from "./routes/admin/tools";
 import { requireUser, requireRole } from "./middleware/guard.middleware.ts";
 import devRouter from "./routes/dev.tsx";
 
@@ -35,6 +36,7 @@ admin.route("/properties", propertyRoute);
 admin.route("/invoices", invoiceRoute);
 admin.route("/tenancies", tenancyRoute);
 admin.route("/rooms", roomRoute);
+admin.route("/tools", adminToolsRoute);
 
 // ==========================================
 // 2. MAIN APP

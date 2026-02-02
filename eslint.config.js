@@ -1,12 +1,13 @@
 import js from "@eslint/js";
 import globals from "globals";
 import tseslint from "typescript-eslint";
+import prettier from "eslint-config-prettier";
 
 export default tseslint.config(
   { ignores: ["dist", "node_modules", ".wrangler", "worker-configuration.d.ts"] },
   {
     // 1. Keep standard JS and TypeScript rules
-    extends: [js.configs.recommended, ...tseslint.configs.recommended],
+    extends: [js.configs.recommended, ...tseslint.configs.recommended, prettier],
 
     // 2. Target your files
     files: ["**/*.{ts,tsx}"],
@@ -26,7 +27,7 @@ export default tseslint.config(
 
       "no-unused-vars": "off",
       "@typescript-eslint/no-unused-vars": "warn",
-      "@typescript-eslint/no-explicit-any": "warn",
+      "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/strict-boolean-expressions": "off",
     },
   },

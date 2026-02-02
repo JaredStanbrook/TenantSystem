@@ -123,17 +123,6 @@ export const buildInvoicePdf = async (
     });
   };
 
-  // Helper: Draw filled rectangle (for backgrounds)
-  const drawRect = (height: number, color = COLORS.background, yOffset = 0) => {
-    page.drawRectangle({
-      x: marginX,
-      y: y + yOffset,
-      width: contentWidth,
-      height,
-      color,
-    });
-  };
-
   // Helper: Ensure space on page
   const ensureSpace = (needed: number) => {
     if (y - needed < 50) {
@@ -150,22 +139,6 @@ export const buildInvoicePdf = async (
     y -= 10;
     drawText(title, { bold: true, size: 12, color: COLORS.primary });
     y -= 20;
-  };
-
-  // Helper: Draw key-value pair
-  const drawKeyValue = (
-    key: string,
-    value: string,
-    options?: { color?: RGB },
-  ) => {
-    ensureSpace(lineHeight);
-    drawText(`${key}:`, { bold: true, size: 10, color: COLORS.textLight });
-    drawText(value, {
-      x: marginX + 120,
-      size: 10,
-      color: options?.color ?? COLORS.text,
-    });
-    y -= lineHeight;
   };
 
   // =========================
@@ -190,7 +163,6 @@ export const buildInvoicePdf = async (
   ensureSpace(100);
 
   // Two-column layout for invoice details
-  const leftColX = marginX;
   const rightColX = marginX + contentWidth / 2 + 20;
   const savedY = y;
 

@@ -1,6 +1,6 @@
 import { html } from "hono/html";
 import { Property } from "../../schema/property.schema";
-import { capitalize, formatCentsToDollars, StatusBadge } from "../lib/utils";
+import { StatusBadge } from "../lib/utils";
 const styles: Record<string, string> = {
   vacant: "bg-blue-100 text-blue-800 border-blue-200",
   occupied: "bg-emerald-100 text-emerald-800 border-emerald-200",
@@ -718,23 +718,18 @@ export const RentReconciliationModal = ({
   id,
   currentCount,
   targetCount,
-  currentRent,
   targetRent,
   formPayload,
 }: {
   id: number;
   currentCount: number;
   targetCount: number;
-  currentRent: number;
   targetRent: number;
   formPayload: Record<string, any>;
 }) => {
   const isAdding = targetCount > currentCount;
   const actionText = isAdding ? "Adding" : "Removing";
   const diff = Math.abs(targetCount - currentCount);
-
-  // Serialize payload to keep other form data (address, name, etc.) alive
-  const payloadString = JSON.stringify(formPayload);
 
   return html`
     <div id="modal-container" hx-swap-oob="innerHTML">

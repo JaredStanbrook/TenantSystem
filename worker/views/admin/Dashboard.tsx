@@ -176,7 +176,6 @@ export const Dashboard = ({
   }
 
   // 2. Dashboard Content
-  const totalRoomsSafe = Math.max(metrics.totalRooms, 1);
 
   return html`
     <div

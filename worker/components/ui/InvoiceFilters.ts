@@ -8,6 +8,7 @@ export const initInvoiceFilters = () => {
   const status = document.getElementById("invoice-status") as HTMLSelectElement | null;
   const type = document.getElementById("invoice-type") as HTMLSelectElement | null;
   const property = document.getElementById("invoice-property") as HTMLSelectElement | null;
+  const historyToggle = document.getElementById("invoice-history") as HTMLInputElement | null;
   const reset = document.getElementById("invoice-reset") as HTMLButtonElement | null;
   const rows = Array.from(list.querySelectorAll("tr[id^='invoice-row-']"));
 
@@ -20,6 +21,11 @@ export const initInvoiceFilters = () => {
         url.searchParams.set(key, String(value));
       }
     });
+    if (historyToggle?.checked) {
+      url.searchParams.set("showAll", "true");
+    } else {
+      url.searchParams.delete("showAll");
+    }
     window.history.replaceState({}, "", url.toString());
   };
 
@@ -72,7 +78,34 @@ export const initInvoiceFilters = () => {
     if (status) status.value = "all";
     if (type) type.value = "all";
     if (property) property.value = "all";
+    if (historyToggle?.checked) {
+      historyToggle.checked = false;
+      historyToggle.dispatchEvent(new Event("change"));
+      return;
+    }
     applyFilters();
+  });
+  historyToggle?.addEventListener("change", () => {
+    const url = new URL(window.location.href);
+    if (search) search.value = "";
+    if (status) status.value = "all";
+    if (type) type.value = "all";
+    if (property) property.value = "all";
+    url.searchParams.delete("q");
+    url.searchParams.delete("status");
+    url.searchParams.delete("type");
+    url.searchParams.delete("property");
+    if (historyToggle.checked) url.searchParams.set("showAll", "true");
+    else url.searchParams.delete("showAll");
+    window.history.replaceState({}, "", url.toString());
+    const w = window as typeof window & {
+      htmx?: { ajax: (method: string, url: string, options?: { target?: string }) => void };
+    };
+    if (w.htmx) {
+      w.htmx.ajax("GET", url.toString(), { target: "#main-content" });
+    } else {
+      window.location.href = url.toString();
+    }
   });
 
   const params = new URLSearchParams(window.location.search);
@@ -80,6 +113,7 @@ export const initInvoiceFilters = () => {
   if (status) status.value = params.get("status") || "all";
   if (type) type.value = params.get("type") || "all";
   if (property) property.value = params.get("property") || "all";
+  if (historyToggle) historyToggle.checked = params.get("showAll") === "true";
   applyFilters();
 
   filters.querySelectorAll("[data-range]").forEach((btn) => {

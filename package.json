@@ -1,20 +1,25 @@
 {
   "name": "tenantsystem",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "bunx --bun vite",
-    "build": "bun run typecheck || true && bun run build:client && bun run build:server",
+    "build": "bun run typecheck && bun run build:client && bun run build:server",
     "build:client": "bunx --bun vite build --mode client",
     "build:server": "bunx --bun vite build",
     "typecheck": "tsc -b",
     "gen": "bunx drizzle-kit generate && bunx wrangler types",
     "migrate:local": "bun run gen && bunx wrangler d1 migrations apply sheoak_ct",
     "migrate:remote": "bun run gen && bunx wrangler d1 migrations apply sheoak_ct --remote",
+    "create-admin": "bun run scripts/create-admin.ts",
+    "create-admin:local": "bun run scripts/create-admin.ts --local",
+    "create-admin:remote": "bun run scripts/create-admin.ts --remote",
     "deploy:staging": "bun run migrate:remote && bun run build && bunx wrangler deploy --env staging",
     "deploy:prod": "bun run migrate:remote && bun run build && bunx wrangler deploy",
     "lint": "eslint .",
+    "format": "prettier --check .",
+    "format:write": "prettier --write .",
     "preview": "bun run build && bunx wrangler dev",
     "prepare": "husky",
     "test": "vitest"
@@ -44,6 +49,7 @@
     "@hono/vite-build": "^1.8.0",
     "@types/node": "^24.10.2",
     "@types/qrcode": "^1.5.6",
+    "bun-types": "^1.2.20",
     "drizzle-kit": "^0.31.4",
     "eslint": "^9.33.0",
     "globals": "^16.3.0",
@@ -53,7 +59,9 @@
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.39.1",
     "vite": "^7.2.7",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "prettier": "^3.6.1",
+    "eslint-config-prettier": "^10.1.8"
   },
   "trustedDependencies": [
     "@tailwindcss/oxide",

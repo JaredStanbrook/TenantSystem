@@ -17,8 +17,8 @@
   ],
   "vars": {
     // --- SECRETS & KEYS ---
-    "JWT_SECRET": "secret",
-    "GOOGLE_MAPS_API_KEY": "AIzaSyBarZdC3dMBHljW24FAJkDMvDNWkCZ6Byo",
+    "JWT_SECRET": "CHANGE_ME",
+    "GOOGLE_MAPS_API_KEY": "",
 
     // --- CORE AUTH ---
     "AUTH_METHODS": "passkey,password,totp,pin",

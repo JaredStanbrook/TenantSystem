@@ -31,7 +31,7 @@ export class ProfileEditableName extends LitElement {
       this.value = this.draftValue;
       this.isEditing = false;
       toast("Profile updated", "Display name changed successfully", "success");
-    } catch (e) {
+    } catch {
       toast("Error", "Could not update profile", "error");
     } finally {
       this.isLoading = false;
@@ -101,7 +101,7 @@ export class ProfilePasswordModal extends LitElement {
       this.isOpen = false;
       toast("Success", "Password updated successfully", "success");
       form.reset();
-    } catch (e) {
+    } catch {
       toast("Error", "Failed to update password", "error");
     } finally {
       this.isLoading = false;
@@ -189,7 +189,7 @@ export class ProfileDeleteModal extends LitElement {
     try {
       await api.auth.me.$delete();
       window.location.href = "/register";
-    } catch (e) {
+    } catch {
       toast("Error", "Could not delete account", "error");
       this.isLoading = false;
     }

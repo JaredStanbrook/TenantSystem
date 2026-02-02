@@ -74,7 +74,6 @@ propertyRoute.get("/:propId/rooms", async (c) => {
     RoomTable({
       rooms,
       propertyName: prop.nickname || prop.addressLine1,
-      propertyId: propId,
     }),
   );
 });

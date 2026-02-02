@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
-import { eq, and, count, sql, desc, or, lt, gte, isNull } from "drizzle-orm";
+import { eq, and, count, sql, desc, isNull } from "drizzle-orm";
 import type { AppEnv } from "../../types";
 import { property } from "../../schema/property.schema";
 import { room } from "../../schema/room.schema";

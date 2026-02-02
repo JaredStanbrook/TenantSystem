@@ -10,6 +10,7 @@ import {
   sql,
   getTableColumns,
   isNull,
+  ne,
 } from "drizzle-orm";
 import { z } from "zod";
 
@@ -38,6 +39,7 @@ import {
   htmxToast,
   htmxRedirect,
   flashToast,
+  htmxPushUrl,
 } from "@server/lib/htmx-helpers";
 import { buildInvoicePdf } from "@server/lib/pdf/invoice";
 
@@ -74,8 +76,10 @@ const formSchema = z.object({
 invoiceRoute.get("/", async (c) => {
   const db = c.var.db;
   const user = c.var.auth.user!;
+  const showAll = c.req.query("showAll") === "true";
   const page = parseInt(c.req.query("page") || "1");
   const pageSize = 10;
+  htmxPushUrl(c, c.req.url);
   const offset = (page - 1) * pageSize;
 
   // 1. Security: Get Allowed Properties
@@ -93,6 +97,7 @@ invoiceRoute.get("/", async (c) => {
         invoices: [],
         properties: [],
         pagination: { page: 1, totalPages: 1 },
+        showAll,
       }),
     );
   }
@@ -101,10 +106,14 @@ invoiceRoute.get("/", async (c) => {
   await InvoiceService.refreshOverdueStatuses(db, ownedIds);
 
   // 3. Data Fetching
+  const invoiceWhere = showAll
+    ? inArray(invoice.propertyId, ownedIds)
+    : and(inArray(invoice.propertyId, ownedIds), ne(invoice.status, "void"));
+
   const [countResult] = await db
     .select({ count: count(invoice.id) })
     .from(invoice)
-    .where(inArray(invoice.propertyId, ownedIds));
+    .where(invoiceWhere);
 
   const totalItems = Number(countResult.count);
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
@@ -119,7 +128,7 @@ invoiceRoute.get("/", async (c) => {
     .from(invoice)
     .innerJoin(property, eq(invoice.propertyId, property.id))
     .leftJoin(invoicePayment, eq(invoice.id, invoicePayment.invoiceId))
-    .where(inArray(invoice.propertyId, ownedIds))
+    .where(invoiceWhere)
     .groupBy(invoice.id)
     .orderBy(desc(invoice.dueDate))
     .limit(pageSize)
@@ -138,6 +147,7 @@ invoiceRoute.get("/", async (c) => {
       invoices: flatInvoices,
       properties: ownedProperties,
       pagination: { page, totalPages },
+      showAll,
     }),
   );
 });
@@ -349,10 +359,6 @@ invoiceRoute.get("/:id/edit", async (c) => {
     userDisplayName: p.userDisplayName ?? undefined,
     userEmail: p.userEmail ?? undefined,
   }));
-  const totalPaid = normalizedPayments.reduce(
-    (acc, p) => acc + p.amountPaid,
-    0,
-  );
   return htmxResponse(
     c,
     "Manage Invoice",
@@ -509,7 +515,7 @@ invoiceRoute.get("/fragments/tenant-section", async (c) => {
   const baseShare = Math.floor(totalCents / count);
   let remainder = totalCents % count;
 
-  const splits = tenants.map((t, i) => {
+  const splits = tenants.map((t) => {
     const share = baseShare + (remainder > 0 ? 1 : 0);
     remainder--;
     return {

@@ -2,7 +2,7 @@
 import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { relations, sql } from "drizzle-orm";
-import { email, z } from "zod";
+import { z } from "zod";
 
 // Helper for generating UUIDs
 const genId = () => crypto.randomUUID();

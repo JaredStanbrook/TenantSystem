@@ -62,7 +62,7 @@ export class TotpSetupButton extends LitElement {
       });
 
       this.step = "SCAN";
-    } catch (e) {
+    } catch {
       toast("Error", "Could not generate TOTP secret", "error");
       this.isModalOpen = false;
     }
@@ -87,7 +87,7 @@ export class TotpSetupButton extends LitElement {
       setTimeout(() => {
         window.location.reload();
       }, 2000);
-    } catch (e) {
+    } catch {
       toast("Error", "Invalid verification code", "error");
     } finally {
       this.isLoading = false;
@@ -110,7 +110,7 @@ export class TotpSetupButton extends LitElement {
       setTimeout(() => {
         window.location.reload();
       }, 500);
-    } catch (e) {
+    } catch {
       toast("Error", "Could not disable 2FA", "error");
     } finally {
       this.isLoading = false;

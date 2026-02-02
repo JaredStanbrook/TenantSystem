@@ -99,8 +99,6 @@ tenancyRoute.get("/", async (c) => {
 tenancyRoute.get("/create", async (c) => {
   const db = c.var.db;
   const userId = c.var.auth.user!.id;
-  const selectedPropCookie = getCookie(c, "selected_property_id");
-
   const myProperties = await db
     .select()
     .from(property)
@@ -112,21 +110,6 @@ tenancyRoute.get("/create", async (c) => {
       type: "error",
     });
     return c.body(null, 400);
-  }
-
-  // Pre-fetch rooms if a property is already selected via cookie
-  let availableRooms: any[] = [];
-  if (selectedPropCookie) {
-    availableRooms = await db
-      .select()
-      .from(room)
-      .where(
-        and(
-          eq(room.propertyId, Number(selectedPropCookie)),
-          or(eq(room.status, "vacant_ready"), eq(room.status, "advertised")),
-          isNull(room.deletedAt),
-        ),
-      );
   }
 
   return htmxResponse(

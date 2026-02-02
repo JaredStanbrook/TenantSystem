@@ -1,6 +1,6 @@
 // worker/schema/tenancy.schema.ts
 import { integer, text, sqliteTable } from "drizzle-orm/sqlite-core";
-import { createInsertSchema, createSelectSchema } from "drizzle-zod";
+import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { users } from "./auth.schema";

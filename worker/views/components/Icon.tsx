@@ -1,9 +1,5 @@
 import type { FC } from "hono/jsx";
 
-// The structure you received is an array of children:
-// [ ["path", { d: "..." }], ["circle", { cx: "..." }] ]
-type IconData = [string, Record<string, string>][];
-
 interface IconProps {
   icon: any; // Using any to be safe, but it expects IconData
   class?: string;

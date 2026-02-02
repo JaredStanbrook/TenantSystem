@@ -4,7 +4,6 @@ import { html } from "hono/html";
 import { Invoice } from "../../schema/invoice.schema";
 import { Property } from "../../schema/property.schema";
 import { InvoicePayment } from "../../schema/invoicePayment.schema";
-import { is } from "drizzle-orm";
 import { formatCents } from "../lib/utils";
 
 // Types
@@ -864,10 +863,12 @@ export const InvoiceTable = ({
   invoices,
   properties,
   pagination,
+  showAll = false,
 }: {
   invoices: any[];
   properties: Property[];
   pagination: { page: number; totalPages: number };
+  showAll?: boolean;
 }) => {
   const { page, totalPages } = pagination;
   const hasPrev = page > 1;
@@ -917,7 +918,7 @@ export const InvoiceTable = ({
       </div>
 
       <div class="rounded-2xl border bg-card p-4 shadow-sm md:p-5" id="invoice-filters">
-        <div class="grid gap-3 md:grid-cols-[1.4fr_0.8fr_0.8fr_0.8fr_auto]">
+        <div class="grid gap-3 md:grid-cols-[1.4fr_0.8fr_0.8fr_0.8fr_auto_auto]">
           <div class="relative">
             <i
               data-lucide="search"
@@ -935,9 +936,10 @@ export const InvoiceTable = ({
             class="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <option value="all">All statuses</option>
-            ${["draft", "open", "partial", "paid", "overdue", "void"].map(
+            ${["draft", "open", "partial", "paid", "overdue"].map(
               (status) => html`<option value="${status}">${status}</option>`,
             )}
+            ${showAll ? html`<option value="void">void</option>` : ""}
           </select>
           <select
             id="invoice-type"
@@ -953,6 +955,16 @@ export const InvoiceTable = ({
             <option value="all">All properties</option>
             ${propertyNames.map((name) => html`<option value="${name}">${name}</option>`)}
           </select>
+          <label class="flex h-10 items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm">
+            <input
+              type="checkbox"
+              id="invoice-history"
+              name="showAll"
+              value="true"
+              ${showAll ? "checked" : ""}
+              class="accent-primary h-4 w-4" />
+            History
+          </label>
           <button
             id="invoice-reset"
             class="inline-flex h-10 items-center justify-center rounded-lg border border-input bg-background px-4 text-sm font-medium hover:bg-accent"
@@ -1048,7 +1060,7 @@ export const InvoiceTable = ({
           >
           <button
             ${!hasPrev ? "disabled" : ""}
-            hx-get="/admin/invoices?page=${page - 1}"
+            hx-get="/admin/invoices?page=${page - 1}${showAll ? "&showAll=true" : ""}"
             hx-push-url="true"
             hx-target="#main-content"
             class="btn-sm border bg-background hover:bg-accent disabled:opacity-50"
@@ -1057,7 +1069,7 @@ export const InvoiceTable = ({
           </button>
           <button
             ${!hasNext ? "disabled" : ""}
-            hx-get="/admin/invoices?page=${page + 1}"
+            hx-get="/admin/invoices?page=${page + 1}${showAll ? "&showAll=true" : ""}"
             hx-push-url="true"
             hx-target="#main-content"
             class="btn-sm border bg-background hover:bg-accent disabled:opacity-50"

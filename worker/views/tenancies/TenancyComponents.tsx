@@ -1,7 +1,6 @@
 // views/tenancies/TenancyComponents.tsx
 import { html } from "hono/html";
 import { type Tenancy, TENANCY_STATUS_VALUES } from "@server/schema/tenancy.schema";
-import { VALID_TRANSITIONS } from "@server/services/tenancy.service";
 import { Property } from "../../schema/property.schema";
 import { UserSummary } from "../../schema/auth.schema";
 import { SafeRoom } from "../../schema/room.schema";
@@ -64,12 +63,12 @@ export const TenancyRow = ({ t }: { t: TenancyView }) => html`
       <div class="flex flex-col gap-1">
         <span class="flex items-center gap-2">
           <i data-lucide="calendar-arrow-up" class="w-3.5 h-3.5 text-emerald-600"></i>
-          ${new Date(t.startDate).toLocaleDateString()}
+          ${new Date(t.startDate).toLocaleDateString("en-AU")}
         </span>
         ${t.endDate
           ? html`<span class="flex items-center gap-2">
               <i data-lucide="calendar-arrow-down" class="w-3.5 h-3.5 text-rose-500"></i>
-              ${new Date(t.endDate).toLocaleDateString()}
+              ${new Date(t.endDate).toLocaleDateString("en-AU")}
             </span>`
           : html`<span class="text-xs opacity-50 pl-5.5">Periodic</span>`}
       </div>
