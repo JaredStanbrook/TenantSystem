@@ -183,11 +183,14 @@ export class Auth {
     };
 
     const token = await sign(payload, secret);
+    const isHttps =
+      this.c.req.url.startsWith("https://") ||
+      this.c.req.header("x-forwarded-proto") === "https";
 
     setCookie(this.c, "auth_token", token, {
       httpOnly: true,
-      secure: true,
-      sameSite: "Strict",
+      secure: isHttps,
+      sameSite: isHttps ? "Strict" : "Lax",
       path: "/",
       maxAge: expiresIn,
     });
@@ -196,9 +199,12 @@ export class Auth {
   }
 
   async destroySession() {
+    const isHttps =
+      this.c.req.url.startsWith("https://") ||
+      this.c.req.header("x-forwarded-proto") === "https";
     deleteCookie(this.c, "auth_token", {
       path: "/",
-      secure: true,
+      secure: isHttps,
     });
   }
 

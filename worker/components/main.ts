@@ -5,6 +5,7 @@ import "./ui/ThemeToggle";
 import "./ui/NavUserMenu";
 import "./ui/JoinComponent";
 import "./ui/PropertySelector";
+import "./ui/ProfileIslands";
 
 import "./auth/AuthRegister";
 import "./auth/AuthLogin";

@@ -8,6 +8,15 @@ const styles: Record<string, string> = {
   archived: "bg-gray-100 text-gray-700 border-gray-200",
 };
 
+const toDateInputValue = (value?: string | Date | null) => {
+  if (!value) return "";
+  if (typeof value === "string") return value.slice(0, 10);
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 // --- 1. Property Table Row ---
 export const PropertyRow = ({
   prop,
@@ -390,6 +399,44 @@ export const PropertyForm = ({
               </p>
             </div>
           </div>
+          ${!prop?.id
+            ? html`
+                <div class="space-y-2 rounded-xl border bg-background/60 p-4">
+                  <label class="text-sm font-medium">
+                    First Billing Date <span class="text-destructive">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    name="nextBillingDate"
+                    value="${toDateInputValue(prop?.nextBillingDate as string | Date | null)}"
+                    required
+                    class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                  <p class="text-xs text-muted-foreground">
+                    This sets the first rent billing date for the property.
+                  </p>
+                  ${errors.nextBillingDate
+                    ? html`<p class="text-sm text-destructive">
+                        ${errors.nextBillingDate[0]}
+                      </p>`
+                    : ""}
+                </div>
+              `
+            : html`
+                <div class="space-y-2 rounded-xl border bg-background/60 p-4">
+                  <label class="text-sm font-medium">Next Billing Date</label>
+                  <input
+                    type="date"
+                    value="${toDateInputValue(prop?.nextBillingDate as string | Date | null)}"
+                    disabled
+                    class="flex h-10 w-full rounded-lg border border-input bg-muted px-3 py-2 text-sm text-muted-foreground cursor-not-allowed"
+                  />
+                  <p class="text-xs text-muted-foreground">
+                    Used by invoicing to determine the next rent billing cycle.
+                    This can only be set when creating the property.
+                  </p>
+                </div>
+              `}
         </div>
 
         <div class="flex items-center justify-between gap-3 border-t pt-4">
@@ -438,6 +485,7 @@ export const PropertyForm = ({
               "border-input",
               "bg-background",
               "text-sm",
+              "text-foreground",
               "ring-offset-background",
               "focus-visible:outline-none",
               "focus-visible:ring-2",

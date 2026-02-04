@@ -82,6 +82,7 @@ export const formPropertySchema = insertPropertySchema
     bedrooms: z.coerce.number().min(0),
     bathrooms: z.coerce.number().min(0),
     parkingSpaces: z.coerce.number().min(0),
+    nextBillingDate: z.coerce.date().optional().nullable(),
     rentStrategy: z.enum(["distribute_property_rent", "preserve_room_rates"]).optional(),
   });
 

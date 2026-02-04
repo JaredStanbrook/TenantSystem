@@ -1,11 +1,11 @@
 import type { FC } from "hono/jsx";
 import type { SafeUser } from "../../schema/auth.schema";
-import { Icon } from "../components/Icon";
-import { User } from "lucide";
 import { type AuthConfig } from "@server/config/auth.config";
 import { StatusBadge } from "../lib/utils";
 
 const styles: Record<string, string> = {
+  verified: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  unverified: "bg-amber-100 text-amber-800 border-amber-200",
   tenant: "bg-blue-100 text-blue-800 border-blue-200",
   landlord: "bg-emerald-100 text-emerald-800 border-emerald-200",
   admin: "bg-purple-100 text-purple-800 border-purple-200",
@@ -30,23 +30,20 @@ export const ProfilePage: FC<ProfileProps> = (props) => {
   };
 
   return (
-    <div class="max-w-7xl px-4 mx-auto pt-14">
-      <div class="max-w-4xl py-10 space-y-8">
-        {/* HEADER */}
-        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <div class="max-w-7xl mx-auto space-y-8 p-8 pt-20 animate-in fade-in duration-500">
+      <div class="space-y-4 animate-in fade-in duration-300">
+        <div class="flex items-center justify-between">
           <div>
-            <h1 class="text-3xl font-bold tracking-tight">Profile Settings</h1>
+            <h2 class="text-3xl font-bold tracking-tight">Profile Settings</h2>
             <p class="text-muted-foreground">Manage your account settings and preferences.</p>
           </div>
         </div>
 
-        <div class="shrink-0 bg-border h-[1px] w-full"></div>
-
         {/* 1. PERSONAL INFORMATION */}
-        <div class="rounded-xl border bg-card text-card-foreground shadow">
+        <div class="rounded-2xl border bg-gradient-to-b from-card to-card/70 text-card-foreground p-6 shadow-sm md:p-8">
           <div class="flex flex-col space-y-1.5 p-6">
             <div class="flex items-center gap-2">
-              <Icon icon={User} class="h-5 w-5 text-primary" />
+              <i data-lucide="user" class="h-5 w-5 text-primary"></i>
               <h3 class="font-semibold leading-none tracking-tight">Personal Information</h3>
             </div>
             <p class="text-sm text-muted-foreground">Basic identification details.</p>
@@ -72,12 +69,14 @@ export const ProfilePage: FC<ProfileProps> = (props) => {
               </div>
             </div>
 
-            <div class="space-y-1">
+            <div class="space-y-2">
               <label class="text-muted-foreground text-xs uppercase font-medium">
                 Display Name
               </label>
-              {/* Interactive Lit Component */}
-              <profile-editable-name value={props.user.displayName || ""}></profile-editable-name>
+              <div class="rounded-xl border bg-background/60 p-3">
+                <profile-editable-name
+                  value={props.user.displayName || ""}></profile-editable-name>
+              </div>
             </div>
 
             <div class="space-y-1">
@@ -106,7 +105,7 @@ export const ProfilePage: FC<ProfileProps> = (props) => {
         </div>
 
         {/* 2. SECURITY SETTINGS */}
-        <div class="rounded-xl border bg-card text-card-foreground shadow">
+        <div class="rounded-2xl border bg-gradient-to-b from-card to-card/70 text-card-foreground p-6 shadow-sm md:p-8">
           <div class="flex flex-col space-y-1.5 p-6">
             <div class="flex items-center gap-2">
               <svg
@@ -216,7 +215,7 @@ export const ProfilePage: FC<ProfileProps> = (props) => {
         </div>
 
         {/* 3. DANGER ZONE */}
-        <div class="rounded-xl border border-destructive/50 bg-destructive/5 text-card-foreground shadow">
+        <div class="rounded-2xl border border-destructive/50 bg-destructive/5 text-card-foreground p-6 shadow-sm md:p-8">
           <div class="flex flex-col space-y-1.5 p-6">
             <div class="flex items-center gap-2 text-destructive">
               <svg

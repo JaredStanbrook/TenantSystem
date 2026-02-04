@@ -20,7 +20,7 @@ import { PropertySelector } from "@views/components/NavBar";
 import { SelectionDialog } from "@server/views/components/SelectionDialog";
 import { ConfirmationDialog } from "@views/components/ConfirmationDialog";
 import { currencyConvertor } from "@server/lib/utils";
-import { addDays, addMonths } from "date-fns";
+import { addDays, addMonths, startOfDay } from "date-fns";
 
 export const propertyRoute = new Hono<AppEnv>();
 
@@ -113,22 +113,25 @@ propertyRoute.post(
     const data = c.req.valid("form");
     const userId = c.var.auth.user!.id;
     data.rentAmount = currencyConvertor(data.rentAmount.toString());
-    // Calculate nextBillingDate based on rentFrequency
+    // Use explicit first billing date from form, with fallback for older clients.
     let nextBillingDate: Date;
-    const now = new Date();
-
-    switch (data.rentFrequency) {
-      case "weekly":
-        nextBillingDate = addDays(now, 7);
-        break;
-      case "fortnightly":
-        nextBillingDate = addDays(now, 14);
-        break;
-      case "monthly":
-        nextBillingDate = addMonths(now, 1);
-        break;
-      default:
-        nextBillingDate = now;
+    if (data.nextBillingDate) {
+      nextBillingDate = startOfDay(data.nextBillingDate);
+    } else {
+      const now = new Date();
+      switch (data.rentFrequency) {
+        case "weekly":
+          nextBillingDate = addDays(now, 7);
+          break;
+        case "fortnightly":
+          nextBillingDate = addDays(now, 14);
+          break;
+        case "monthly":
+          nextBillingDate = addMonths(now, 1);
+          break;
+        default:
+          nextBillingDate = now;
+      }
     }
 
     const [newProp] = await db
@@ -356,7 +359,13 @@ propertyRoute.post(
     batchOperations.push(
       db
         .update(property)
-        .set({ ...data, rentAmount: finalPropertyRent, updatedAt: new Date() })
+        .set({
+          ...data,
+          // nextBillingDate is create-only; preserve original value on edits.
+          nextBillingDate: existing.nextBillingDate,
+          rentAmount: finalPropertyRent,
+          updatedAt: new Date(),
+        })
         .where(eq(property.id, id)),
     );
 
