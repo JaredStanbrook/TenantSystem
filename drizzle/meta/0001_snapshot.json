@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "fcf49616-b5a7-4fd9-9cb5-f74e1090efb3",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "8d4a0ee2-fe7a-4b90-a2fb-eac9df3e8a7e",
+  "prevId": "fcf49616-b5a7-4fd9-9cb5-f74e1090efb3",
   "tables": {
     "auth_logs": {
       "name": "auth_logs",
@@ -416,6 +416,13 @@
           "notNull": true,
           "autoincrement": true
         },
+        "sequence_number": {
+          "name": "sequence_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "property_id": {
           "name": "property_id",
           "type": "integer",
@@ -577,7 +584,16 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "bill_user_sequence_unique": {
+          "name": "bill_user_sequence_unique",
+          "columns": [
+            "user_id",
+            "sequence_number"
+          ],
+          "isUnique": true
+        }
+      },
       "foreignKeys": {
         "bill_property_id_property_id_fk": {
           "name": "bill_property_id_property_id_fk",
@@ -632,6 +648,13 @@
           "primaryKey": true,
           "notNull": true,
           "autoincrement": true
+        },
+        "sequence_number": {
+          "name": "sequence_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
         },
         "property_id": {
           "name": "property_id",
@@ -785,6 +808,14 @@
           "name": "bond_idempotency_key_unique",
           "columns": [
             "idempotency_key"
+          ],
+          "isUnique": true
+        },
+        "bond_user_sequence_unique": {
+          "name": "bond_user_sequence_unique",
+          "columns": [
+            "user_id",
+            "sequence_number"
           ],
           "isUnique": true
         }
@@ -1276,6 +1307,13 @@
           "notNull": true,
           "autoincrement": true
         },
+        "sequence_number": {
+          "name": "sequence_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "property_id": {
           "name": "property_id",
           "type": "integer",
@@ -1442,6 +1480,14 @@
           "name": "rent_idempotency_key_unique",
           "columns": [
             "idempotency_key"
+          ],
+          "isUnique": true
+        },
+        "rent_user_sequence_unique": {
+          "name": "rent_user_sequence_unique",
+          "columns": [
+            "user_id",
+            "sequence_number"
           ],
           "isUnique": true
         }

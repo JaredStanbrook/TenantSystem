@@ -24,6 +24,32 @@ type TenancyView = Tenancy & {
   room?: SafeRoom | null; // Added Room
 };
 
+type LegacyTenancyOnboardingValues = {
+  email?: string;
+  propertyId?: number;
+  roomId?: number;
+  leaseStartDate?: string;
+  leaseEndDate?: string;
+  billedUpToDate?: string;
+  previousRentAmount?: string;
+  previousFrequency?: "weekly" | "fortnightly" | "monthly";
+  bondAmount?: string;
+  bondPaid?: boolean;
+};
+
+const rentGeneratableStatuses = new Set([
+  "active",
+  "move_in_ready",
+  "pending_agreement",
+  "bond_pending",
+]);
+
+const toDateInputValue = (value?: string | Date | null) => {
+  if (!value) return "";
+  const parsed = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().split("T")[0];
+};
+
 // --- 1. Tenancy Row ---
 export const TenancyRow = ({ t }: { t: TenancyView }) => html`
   <tr
@@ -77,6 +103,14 @@ export const TenancyRow = ({ t }: { t: TenancyView }) => html`
 
     <td class="p-4 align-middle text-right">
       <div class="flex justify-end gap-2">
+        ${rentGeneratableStatuses.has(t.status)
+          ? html`<button
+              hx-post="/admin/invoices/tenancy/${t.id}/generate-rent"
+              hx-swap="none"
+              class="inline-flex items-center justify-center rounded-lg text-sm font-medium border border-input bg-background hover:bg-emerald-50 hover:text-emerald-700 h-8 px-3">
+              Generate Rent
+            </button>`
+          : ""}
         <button
           hx-get="/admin/tenancies/${t.id}/edit"
           hx-push-url="true"
@@ -120,6 +154,14 @@ export const TenancyTable = ({
           class="inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 shadow-sm transition-all">
           <i data-lucide="user-plus" class="w-4 h-4"></i>
           New Tenancy
+        </button>
+        <button
+          hx-get="/admin/tenancies/legacy-onboard"
+          hx-target="#main-content"
+          hx-push-url="true"
+          class="inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 shadow-sm transition-all">
+          <i data-lucide="database-backup" class="w-4 h-4"></i>
+          Legacy Onboard
         </button>
       </div>
     </div>
@@ -229,6 +271,307 @@ export const TenancyTable = ({
     </div>
   </div>
 
+`;
+
+export const LegacyRoomAssignment = ({
+  rooms = [],
+  selectedRoomId,
+}: {
+  rooms?: SafeRoom[];
+  selectedRoomId?: number;
+}) => html`
+  <div id="legacy-room-assignment" class="space-y-4">
+    <div class="space-y-2">
+      <label class="text-sm font-medium leading-none"
+        >Room Assignment <span class="text-destructive">*</span></label
+      >
+      <select
+        id="legacy-room-select"
+        name="roomId"
+        required
+        hx-get="/admin/tenancies/legacy-onboard/room-preview"
+        hx-target="#legacy-room-preview"
+        hx-include="closest form"
+        hx-trigger="change"
+        class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <option value="">Select a Room...</option>
+        ${rooms.map(
+          (r) => html`
+            <option value="${r.id}" ${selectedRoomId === r.id ? "selected" : ""}>
+              ${r.name} (${r.status ? r.status.replace("_", " ") : "Unknown"})
+            </option>
+          `,
+        )}
+      </select>
+    </div>
+    <div
+      id="legacy-room-preview"
+      class="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
+      Select room to preview imported rent amount.
+    </div>
+  </div>
+`;
+
+export const LegacyRoomPreview = ({
+  roomName,
+  amountCents,
+  frequency,
+}: {
+  roomName?: string;
+  amountCents?: number;
+  frequency?: string;
+}) => {
+  if (!roomName || !amountCents || !frequency) {
+    return html`
+      <div
+        id="legacy-room-preview"
+        class="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
+        Select room to preview imported rent amount.
+      </div>
+    `;
+  }
+
+  return html`
+    <div
+      id="legacy-room-preview"
+      class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+      <div class="font-medium">${roomName}</div>
+      <div class="mt-1">New rent preview: $${(amountCents / 100).toFixed(2)} / ${frequency}</div>
+    </div>
+  `;
+};
+
+export const LegacyTenancyOnboardingForm = ({
+  properties = [],
+  rooms = [],
+  values = {},
+  errors = {},
+}: {
+  properties?: Property[];
+  rooms?: SafeRoom[];
+  values?: LegacyTenancyOnboardingValues;
+  errors?: Record<string, string[]>;
+}) => html`
+  <div class="max-w-3xl mx-auto space-y-8 p-8 pt-20 animate-in fade-in duration-500">
+    <div class="flex items-center justify-between gap-4">
+      <div>
+        <h2 class="text-2xl font-bold tracking-tight">Legacy Tenant Onboarding</h2>
+        <p class="text-muted-foreground">
+          Import one tenant from another system without touching normal onboarding flow.
+        </p>
+      </div>
+      <button
+        hx-get="/admin/tenancies"
+        hx-push-url="true"
+        hx-target="#main-content"
+        class="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 px-2 py-1 rounded-md hover:bg-muted transition-colors">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i> Back
+      </button>
+    </div>
+
+    <div class="space-y-6 border rounded-xl p-6 bg-card shadow-sm">
+      <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+        Rare path. Powerful path. Use for existing tenants migrated from another system.
+      </div>
+
+      <form hx-post="/admin/tenancies/legacy-onboard" hx-target="#main-content" class="space-y-6">
+        <input type="hidden" name="bondPaid" value="false" />
+
+        <div class="space-y-4">
+          <h3 class="text-sm font-semibold text-foreground flex items-center gap-2">
+            <i data-lucide="user" class="w-4 h-4"></i> Tenant
+          </h3>
+          <div class="space-y-2">
+            <label class="text-sm font-medium leading-none"
+              >Email Address <span class="text-destructive">*</span></label
+            >
+            <input
+              type="email"
+              name="email"
+              value="${values.email || ""}"
+              required
+              placeholder="tenant@example.com"
+              class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+            ${errors.email ? html`<p class="text-destructive text-xs font-medium">${errors.email[0]}</p>` : ""}
+          </div>
+        </div>
+
+        <hr class="border-border/50" />
+
+        <div class="space-y-4">
+          <h3 class="text-sm font-semibold text-foreground flex items-center gap-2">
+            <i data-lucide="building-2" class="w-4 h-4"></i> Property & Room
+          </h3>
+          <div class="grid sm:grid-cols-2 gap-4 items-start">
+            <div class="space-y-2">
+              <label class="text-sm font-medium leading-none"
+                >Property <span class="text-destructive">*</span></label
+              >
+              <select
+                name="propertyId"
+                required
+                hx-get="/admin/tenancies/legacy-onboard/rooms"
+                hx-target="#legacy-room-assignment"
+                hx-trigger="change"
+                hx-include="closest form"
+                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <option value="">Select a Property...</option>
+                ${properties.map(
+                  (p) => html`
+                    <option value="${p.id}" ${values.propertyId === p.id ? "selected" : ""}>
+                      ${p.nickname || p.addressLine1}
+                    </option>
+                  `,
+                )}
+              </select>
+              ${errors.propertyId ? html`<p class="text-destructive text-xs font-medium">${errors.propertyId[0]}</p>` : ""}
+            </div>
+            ${LegacyRoomAssignment({
+              rooms,
+              selectedRoomId: values.roomId,
+            })}
+          </div>
+          ${errors.roomId ? html`<p class="text-destructive text-xs font-medium">${errors.roomId[0]}</p>` : ""}
+        </div>
+
+        <hr class="border-border/50" />
+
+        <div class="space-y-4">
+          <h3 class="text-sm font-semibold text-foreground flex items-center gap-2">
+            <i data-lucide="file-text" class="w-4 h-4"></i> Lease Details
+          </h3>
+          <div class="grid sm:grid-cols-2 gap-4">
+            <div class="space-y-2">
+              <label class="text-sm font-medium leading-none"
+                >Lease Start Date <span class="text-destructive">*</span></label
+              >
+              <input
+                type="date"
+                name="leaseStartDate"
+                value="${toDateInputValue(values.leaseStartDate)}"
+                required
+                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+              ${errors.leaseStartDate ? html`<p class="text-destructive text-xs font-medium">${errors.leaseStartDate[0]}</p>` : ""}
+            </div>
+            <div class="space-y-2">
+              <label class="text-sm font-medium leading-none flex justify-between">
+                Lease End Date
+                <span class="text-xs text-muted-foreground font-normal">Optional for periodic</span>
+              </label>
+              <input
+                type="date"
+                name="leaseEndDate"
+                value="${toDateInputValue(values.leaseEndDate)}"
+                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+              ${errors.leaseEndDate ? html`<p class="text-destructive text-xs font-medium">${errors.leaseEndDate[0]}</p>` : ""}
+            </div>
+          </div>
+        </div>
+
+        <hr class="border-border/50" />
+
+        <div class="space-y-4">
+          <h3 class="text-sm font-semibold text-foreground flex items-center gap-2">
+            <i data-lucide="receipt" class="w-4 h-4"></i> Legacy Billing
+          </h3>
+          <div class="grid sm:grid-cols-2 gap-4">
+            <div class="space-y-2">
+              <label class="text-sm font-medium leading-none"
+                >Billed Up To Date <span class="text-destructive">*</span></label
+              >
+              <input
+                type="date"
+                name="billedUpToDate"
+                value="${toDateInputValue(values.billedUpToDate)}"
+                required
+                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+              ${errors.billedUpToDate ? html`<p class="text-destructive text-xs font-medium">${errors.billedUpToDate[0]}</p>` : ""}
+            </div>
+            <div class="space-y-2">
+              <label class="text-sm font-medium leading-none"
+                >Previous Rent Amount <span class="text-destructive">*</span></label
+              >
+              <div class="relative">
+                <span class="absolute left-3 top-2.5 text-sm text-muted-foreground">$</span>
+                <input
+                  type="number"
+                  name="previousRentAmount"
+                  step="0.01"
+                  min="0.01"
+                  value="${values.previousRentAmount || ""}"
+                  required
+                  class="flex h-10 w-full pl-7 rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+              </div>
+              ${errors.previousRentAmount
+                ? html`<p class="text-destructive text-xs font-medium">${errors.previousRentAmount[0]}</p>`
+                : ""}
+            </div>
+            <div class="space-y-2">
+              <label class="text-sm font-medium leading-none"
+                >Previous Frequency <span class="text-destructive">*</span></label
+              >
+              <select
+                name="previousFrequency"
+                required
+                class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <option value="weekly" ${values.previousFrequency === "weekly" ? "selected" : ""}>Weekly</option>
+                <option value="fortnightly" ${values.previousFrequency === "fortnightly" ? "selected" : ""}>
+                  Fortnightly
+                </option>
+                <option value="monthly" ${values.previousFrequency === "monthly" ? "selected" : ""}>Monthly</option>
+              </select>
+              ${errors.previousFrequency
+                ? html`<p class="text-destructive text-xs font-medium">${errors.previousFrequency[0]}</p>`
+                : ""}
+            </div>
+          </div>
+        </div>
+
+        <hr class="border-border/50" />
+
+        <div class="space-y-4">
+          <h3 class="text-sm font-semibold text-foreground flex items-center gap-2">
+            <i data-lucide="shield-check" class="w-4 h-4"></i> Bond
+          </h3>
+          <div class="grid sm:grid-cols-[1fr_auto] gap-4 items-end">
+            <div class="space-y-2">
+              <label class="text-sm font-medium leading-none">Bond Amount</label>
+              <div class="relative">
+                <span class="absolute left-3 top-2.5 text-sm text-muted-foreground">$</span>
+                <input
+                  type="number"
+                  name="bondAmount"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  value="${values.bondAmount || ""}"
+                  class="flex h-10 w-full pl-7 rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+              </div>
+              ${errors.bondAmount ? html`<p class="text-destructive text-xs font-medium">${errors.bondAmount[0]}</p>` : ""}
+            </div>
+            <label class="inline-flex items-center gap-3 rounded-lg border px-4 py-3 text-sm font-medium">
+              <input
+                type="checkbox"
+                name="bondPaid"
+                value="true"
+                ${values.bondPaid ? "checked" : ""}
+                class="h-4 w-4 rounded border-input" />
+              Bond already paid
+            </label>
+          </div>
+        </div>
+
+        <div class="flex justify-end pt-2">
+          <button
+            type="submit"
+            class="inline-flex items-center justify-center rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-8 py-2 shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]">
+            <i data-lucide="database-zap" class="mr-2 h-4 w-4"></i>
+            Import Legacy Tenant
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
 `;
 
 // --- 3. Tenancy Form (Enhanced) ---

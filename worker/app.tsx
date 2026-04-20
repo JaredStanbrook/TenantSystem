@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { setCookie, deleteCookie } from "hono/cookie";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { globalRenderer } from "./middleware/renderer.middleware.tsx";
 import { ProfilePage } from "./views/pages/Profile";
@@ -22,6 +23,7 @@ import { adminToolsRoute } from "./routes/admin/tools";
 import { logsRoute } from "./routes/admin/logs";
 import { requireUser, requireRole } from "./middleware/guard.middleware.ts";
 import devRouter from "./routes/dev.tsx";
+import { property } from "./schema/property.schema";
 
 // ==========================================
 // 1. ADMIN SUB-APP (Protected by RBAC)
@@ -86,11 +88,28 @@ const app = new Hono<AppEnv>()
     zValidator("form", z.object({ propertyId: z.string() })),
     async (c) => {
       const { propertyId } = c.req.valid("form");
+      const user = c.var.auth.user!;
+      const isAdmin = user.roles.includes("admin");
       console.log("Switching context to property ID:", propertyId);
       if (propertyId === "all") {
         // "View All" - remove the filter
         deleteCookie(c, "selected_property_id");
       } else {
+        const [selectedProperty] = await c.var.db
+          .select({ id: property.id })
+          .from(property)
+          .where(
+            and(
+              eq(property.id, Number(propertyId)),
+              isAdmin ? undefined : eq(property.landlordId, user.id),
+              isNull(property.deletedAt),
+            ),
+          );
+
+        if (!selectedProperty) {
+          return c.text("Unauthorized", 403);
+        }
+
         // Set the specific property ID in a secure cookie
         setCookie(c, "selected_property_id", propertyId, {
           path: "/",

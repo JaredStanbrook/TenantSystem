@@ -14,6 +14,7 @@ declare module "hono" {
 export const globalRenderer = jsxRenderer(async ({ children, title }, c) => {
   const db = c.var.db;
   const user = c.var.auth?.user || null;
+  const isAdmin = !!user?.roles?.includes("admin");
 
   const cookieId = getCookie(c, "selected_property_id");
   const currentPropertyId = cookieId ? Number(cookieId) : undefined;
@@ -22,7 +23,12 @@ export const globalRenderer = jsxRenderer(async ({ children, title }, c) => {
     ? await db
         .select()
         .from(property)
-        .where(and(eq(property.landlordId, user.id), isNull(property.deletedAt)))
+        .where(
+          and(
+            isAdmin ? undefined : eq(property.landlordId, user.id),
+            isNull(property.deletedAt),
+          ),
+        )
     : [];
 
   //const currentPath = c.req.path;

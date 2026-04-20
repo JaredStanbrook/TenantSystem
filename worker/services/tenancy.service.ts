@@ -61,6 +61,7 @@ export class TenancyService {
     tenancyId: number,
     newStatus: TenancyStatus,
     actorId: string,
+    isAdmin: boolean = false,
     force: boolean = false, // Add force parameter
   ): Promise<Tenancy> {
     const [record] = await this.db
@@ -70,7 +71,7 @@ export class TenancyService {
       .where(eq(tenancy.id, tenancyId));
 
     if (!record) throw new Error("Tenancy not found");
-    if (record.p.landlordId !== actorId) throw new Error("Unauthorized");
+    if (!isAdmin && record.p.landlordId !== actorId) throw new Error("Unauthorized");
 
     const currentStatus = record.t.status as TenancyStatus;
 

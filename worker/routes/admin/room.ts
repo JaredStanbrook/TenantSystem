@@ -10,6 +10,7 @@ import { currencyConvertor } from "@server/lib/utils";
 import type { AppEnv } from "@server/types";
 
 export const roomRoute = new Hono<AppEnv>();
+const isAdminUser = (roles: string[]) => roles.includes("admin");
 
 // Schema for updating a room
 const updateRoomSchema = z.object({
@@ -22,6 +23,8 @@ const updateRoomSchema = z.object({
 roomRoute.get("/:id/edit", async (c) => {
   const db = c.var.db;
   const id = Number(c.req.param("id"));
+  const user = c.var.auth.user!;
+  const isAdmin = isAdminUser(user.roles);
 
   // Join with property to verify ownership
   const [result] = await db
@@ -30,7 +33,7 @@ roomRoute.get("/:id/edit", async (c) => {
     .innerJoin(property, eq(room.propertyId, property.id))
     .where(eq(room.id, id));
 
-  if (!result || result.p.landlordId !== c.var.auth.user!.id) {
+  if (!result || (!isAdmin && result.p.landlordId !== user.id)) {
     return c.text("Unauthorized", 403);
   }
 
@@ -49,8 +52,19 @@ roomRoute.post("/:id/update", zValidator("form", updateRoomSchema), async (c) =>
   const db = c.var.db;
   const id = Number(c.req.param("id"));
   const data = c.req.valid("form");
+  const user = c.var.auth.user!;
+  const isAdmin = isAdminUser(user.roles);
 
-  // Ownership check omitted for brevity, but should be here similar to GET above
+  const [existing] = await db
+    .select({ r: room, p: property })
+    .from(room)
+    .innerJoin(property, eq(room.propertyId, property.id))
+    .where(eq(room.id, id));
+
+  if (!existing || (!isAdmin && existing.p.landlordId !== user.id)) {
+    return c.text("Unauthorized", 403);
+  }
+
   if (data.baseRentAmount !== undefined && !Number.isNaN(data.baseRentAmount)) {
     data.baseRentAmount = currencyConvertor(data.baseRentAmount.toString());
   }

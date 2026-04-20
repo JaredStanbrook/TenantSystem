@@ -1,19 +1,15 @@
-// worker/routes/tenant/expense.tsx
 import { Hono } from "hono";
+import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
-import { eq, and, desc } from "drizzle-orm";
-import { html } from "hono/html"; // Import html helper
-
-import {
-  invoicePayment,
-  markPaidSchema,
-  extensionRequestSchema,
-} from "@server/schema/invoicePayment.schema";
-import { invoice } from "@server/schema/invoice.schema";
-import { AppEnv } from "@server/types";
-import { requireUser } from "@server/middleware/guard.middleware";
+import { html } from "hono/html";
 import { htmxResponse, htmxToast, flashToast } from "@server/lib/htmx-helpers";
-import { InvoiceService } from "@server/services/invoice.service";
+import { requireUser } from "@server/middleware/guard.middleware";
+import {
+  BILL_RECORD_TYPES,
+  type BillingRecordType,
+} from "@server/schema/billing.shared";
+import { BillingService, getEffectiveDueDate } from "@server/services/billing.service";
+import type { AppEnv } from "@server/types";
 import {
   ExpensePage,
   MarkPaidModal,
@@ -24,238 +20,196 @@ export const expenseRoute = new Hono<AppEnv>();
 
 expenseRoute.use("*", requireUser);
 
-// --- HELPER: Fetch Expenses ---
-const getExpenseList = async (db: any, userId: string) => {
-  return await db
-    .select({
-      payment: invoicePayment,
-      invoice: invoice,
-    })
-    .from(invoicePayment)
-    .innerJoin(invoice, eq(invoicePayment.invoiceId, invoice.id))
-    .where(eq(invoicePayment.userId, userId))
-    .orderBy(desc(invoice.dueDate));
+const markPaidSchema = z.object({
+  reference: z.string().trim().max(255).optional(),
+});
+
+const extensionRequestSchema = z.object({
+  requestedDate: z.coerce.date(),
+  reason: z.string().trim().max(1000).optional(),
+});
+
+const recordParamSchema = z.object({
+  recordType: z.enum(BILL_RECORD_TYPES),
+  id: z.coerce.number().int().positive(),
+});
+
+const getExpenseList = async (db: AppEnv["Variables"]["db"], userId: string) =>
+  BillingService.listForTenant(db, userId);
+
+const getOwnedRecord = async (
+  c: any,
+  recordType: BillingRecordType,
+  id: number,
+) => {
+  const user = c.var.auth.user!;
+  return BillingService.getForTenant(c.var.db, user.id, recordType, id);
 };
 
-// 1. GET /expense
 expenseRoute.get("/", async (c) => {
-  const db = c.var.db;
   const user = c.var.auth.user!;
-  const expenses = await getExpenseList(db, user.id);
-
+  const expenses = await getExpenseList(c.var.db, user.id);
   return htmxResponse(c, "My Expenses", ExpensePage(expenses));
 });
 
-// 2. GET /expense/:id/pay (Modal)
-expenseRoute.get("/:id/pay", async (c) => {
-  const id = Number(c.req.param("id"));
-  const db = c.var.db;
-  const user = c.var.auth.user!;
+expenseRoute.get(
+  "/:recordType/:id/pay",
+  zValidator("param", recordParamSchema),
+  async (c) => {
+    const { recordType, id } = c.req.valid("param");
+    const record = await getOwnedRecord(c, recordType, id);
 
-  const [record] = await db
-    .select()
-    .from(invoicePayment)
-    .where(and(eq(invoicePayment.id, id), eq(invoicePayment.userId, user.id)));
+    if (!record) return c.text("Not found", 404);
+    if (record.status === "paid") return c.text("Already paid", 400);
 
-  if (!record) return c.text("Not found", 404);
-  if (record.status === "paid") return c.text("Already paid", 400);
+    return c.html(MarkPaidModal(record.recordType, record.id, record.totalAmount));
+  },
+);
 
-  // Return just the modal HTML
-  return c.html(MarkPaidModal(record.id, record.amountOwed));
-});
+expenseRoute.post(
+  "/:recordType/:id/pay",
+  zValidator("param", recordParamSchema),
+  zValidator("form", markPaidSchema),
+  async (c) => {
+    const { recordType, id } = c.req.valid("param");
+    const { reference } = c.req.valid("form");
+    const user = c.var.auth.user!;
 
-// 3. POST /expense/:id/pay (Action)
-expenseRoute.post("/:id/pay", zValidator("form", markPaidSchema), async (c) => {
-  const id = Number(c.req.param("id"));
-  const { reference } = c.req.valid("form");
-  const db = c.var.db;
-  const user = c.var.auth.user!;
+    try {
+      const record = await getOwnedRecord(c, recordType, id);
+      if (!record) {
+        flashToast(c, "Payment not found", { type: "error" });
+        return c.text("Unauthorized", 403);
+      }
 
-  try {
-    // Verify ownership
-    const [record] = await db
-      .select()
-      .from(invoicePayment)
-      .where(and(eq(invoicePayment.id, id), eq(invoicePayment.userId, user.id)));
+      if (record.tenantMarkedPaidAt) {
+        flashToast(c, "Payment already marked as paid", { type: "info" });
+        return c.redirect("/expense");
+      }
 
-    if (!record) {
-      flashToast(c, "Payment not found", { type: "error" });
-      return c.text("Unauthorized", 403);
-    }
+      await BillingService.markTenantPaid(c.var.db, recordType, id, reference);
 
-    // Check if already marked as paid
-    if (record.tenantMarkedPaidAt) {
-      flashToast(c, "Payment already marked as paid", { type: "info" });
+      if (c.req.header("HX-Request")) {
+        const expenses = await getExpenseList(c.var.db, user.id);
+        return c.html(html`
+          ${ExpensePage(expenses)}
+          <div id="modal-container" hx-swap-oob="innerHTML"></div>
+          ${htmxToast(c, "Payment flagged. Waiting for landlord approval.", { type: "success" })}
+        `);
+      }
+
+      flashToast(c, "Payment flagged. Waiting for landlord approval.", { type: "success" });
+      return c.redirect("/expense");
+    } catch (error) {
+      console.error("Failed to mark payment as paid:", error);
+      flashToast(c, "Failed to mark payment as paid", { type: "error" });
       return c.redirect("/expense");
     }
+  },
+);
 
-    // Update payment record
-    await db
-      .update(invoicePayment)
-      .set({
-        tenantMarkedPaidAt: new Date(),
-        paymentReference: reference || null,
-      })
-      .where(eq(invoicePayment.id, id));
+expenseRoute.get(
+  "/:recordType/:id/extend",
+  zValidator("param", recordParamSchema),
+  async (c) => {
+    const { recordType, id } = c.req.valid("param");
+    const record = await getOwnedRecord(c, recordType, id);
 
-    // Reconcile invoice status (important for updating overdue/partial statuses)
-    await InvoiceService.reconcileStatus(db, record.invoiceId);
+    if (!record) return c.text("Not found", 404);
 
-    // Handle HTMX request
-    if (c.req.header("HX-Request")) {
-      const expenses = await getExpenseList(db, user.id);
-      return c.html(html`
-        ${ExpensePage(expenses)}
-        <div id="modal-container" hx-swap-oob="innerHTML"></div>
-        ${htmxToast(c, "Payment flagged. Waiting for landlord approval.", { type: "success" })}
-      `);
+    const daysOverdue =
+      (Date.now() - getEffectiveDueDate(record).getTime()) / (1000 * 60 * 60 * 24);
+    if (daysOverdue > 14) {
+      return c.text("Severely overdue", 400);
     }
 
-    // Fallback for non-JS
-    flashToast(c, "Payment flagged. Waiting for landlord approval.", { type: "success" });
-    return c.redirect("/expense");
-  } catch (error: any) {
-    console.error("Failed to mark payment as paid:", error);
-    flashToast(c, "Failed to mark payment as paid", { type: "error" });
-    return c.redirect("/expense");
-  }
-});
+    return c.html(RequestExtensionModal(record.recordType, record.id, record.dueDate));
+  },
+);
 
-// 4. GET /expense/:id/extend (Modal)
-expenseRoute.get("/:id/extend", async (c) => {
-  const id = Number(c.req.param("id"));
-  const db = c.var.db;
-  const user = c.var.auth.user!;
+expenseRoute.post(
+  "/:recordType/:id/extend",
+  zValidator("param", recordParamSchema),
+  zValidator("form", extensionRequestSchema),
+  async (c) => {
+    const { recordType, id } = c.req.valid("param");
+    const { requestedDate, reason } = c.req.valid("form");
+    const user = c.var.auth.user!;
 
-  const [record] = await db
-    .select({ payment: invoicePayment, invoice: invoice })
-    .from(invoicePayment)
-    .innerJoin(invoice, eq(invoicePayment.invoiceId, invoice.id))
-    .where(and(eq(invoicePayment.id, id), eq(invoicePayment.userId, user.id)));
+    try {
+      const record = await getOwnedRecord(c, recordType, id);
+      if (!record) {
+        flashToast(c, "Payment not found", { type: "error" });
+        return c.text("Unauthorized", 403);
+      }
 
-  if (!record) return c.text("Not found", 404);
+      if (record.extensionStatus === "pending") {
+        flashToast(c, "Extension request already pending", { type: "info" });
+        return c.redirect("/expense");
+      }
 
-  const daysOverdue = (Date.now() - record.invoice.dueDate.getTime()) / (1000 * 60 * 60 * 24);
-  if (daysOverdue > 14) {
-    // Return error toast directly if invoked via HTMX
-    return c.text("Severely overdue", 400);
-  }
+      if (record.extensionStatus === "approved") {
+        flashToast(c, "Extension already approved", { type: "info" });
+        return c.redirect("/expense");
+      }
 
-  return c.html(RequestExtensionModal(record.payment.id, record.invoice.dueDate));
-});
+      await BillingService.requestExtension(c.var.db, recordType, id, requestedDate, reason);
 
-// 5. POST /expense/:id/extend (Action)
-expenseRoute.post("/:id/extend", zValidator("form", extensionRequestSchema), async (c) => {
-  const id = Number(c.req.param("id"));
-  const { requestedDate, reason } = c.req.valid("form");
-  const db = c.var.db;
-  const user = c.var.auth.user!;
+      if (c.req.header("HX-Request")) {
+        const expenses = await getExpenseList(c.var.db, user.id);
+        return c.html(html`
+          ${ExpensePage(expenses)}
+          <div id="modal-container" hx-swap-oob="innerHTML"></div>
+          ${htmxToast(c, "Extension requested. Awaiting landlord review.", { type: "success" })}
+        `);
+      }
 
-  try {
-    // Verify ownership
-    const [record] = await db
-      .select()
-      .from(invoicePayment)
-      .where(and(eq(invoicePayment.id, id), eq(invoicePayment.userId, user.id)));
-
-    if (!record) {
-      flashToast(c, "Payment not found", { type: "error" });
-      return c.text("Unauthorized", 403);
-    }
-
-    // Check if already has a pending extension
-    if (record.extensionStatus === "pending") {
-      flashToast(c, "Extension request already pending", { type: "info" });
+      flashToast(c, "Extension requested. Awaiting landlord review.", { type: "success" });
+      return c.redirect("/expense");
+    } catch (error) {
+      console.error("Failed to request extension:", error);
+      flashToast(c, "Failed to request extension", { type: "error" });
       return c.redirect("/expense");
     }
+  },
+);
 
-    // Check if extension was already approved
-    if (record.extensionStatus === "approved") {
-      flashToast(c, "Extension already approved", { type: "info" });
+expenseRoute.post(
+  "/:recordType/:id/cancel-extension",
+  zValidator("param", recordParamSchema),
+  async (c) => {
+    const { recordType, id } = c.req.valid("param");
+    const user = c.var.auth.user!;
+
+    try {
+      const record = await getOwnedRecord(c, recordType, id);
+      if (!record) {
+        flashToast(c, "Payment not found", { type: "error" });
+        return c.text("Unauthorized", 403);
+      }
+
+      if (record.extensionStatus !== "pending") {
+        flashToast(c, "No pending extension to cancel", { type: "info" });
+        return c.redirect("/expense");
+      }
+
+      await BillingService.cancelExtensionRequest(c.var.db, recordType, id);
+
+      if (c.req.header("HX-Request")) {
+        const expenses = await getExpenseList(c.var.db, user.id);
+        return c.html(html`
+          ${ExpensePage(expenses)}
+          <div id="modal-container" hx-swap-oob="innerHTML"></div>
+          ${htmxToast(c, "Extension request cancelled", { type: "success" })}
+        `);
+      }
+
+      flashToast(c, "Extension request cancelled", { type: "success" });
+      return c.redirect("/expense");
+    } catch (error) {
+      console.error("Failed to cancel extension:", error);
+      flashToast(c, "Failed to cancel extension", { type: "error" });
       return c.redirect("/expense");
     }
-
-    // Update payment record with extension request
-    await db
-      .update(invoicePayment)
-      .set({
-        extensionStatus: "pending",
-        extensionRequestedDate: requestedDate,
-        extensionReason: reason || null,
-      })
-      .where(eq(invoicePayment.id, id));
-
-    // Note: We don't reconcile status here as the extension is just a request
-    // Status reconciliation happens when landlord approves/rejects
-
-    // Handle HTMX request
-    if (c.req.header("HX-Request")) {
-      const expenses = await getExpenseList(db, user.id);
-      return c.html(html`
-        ${ExpensePage(expenses)}
-        <div id="modal-container" hx-swap-oob="innerHTML"></div>
-        ${htmxToast(c, "Extension requested. Awaiting landlord review.", { type: "success" })}
-      `);
-    }
-
-    // Fallback for non-JS
-    flashToast(c, "Extension requested. Awaiting landlord review.", { type: "success" });
-    return c.redirect("/expense");
-  } catch (error: any) {
-    console.error("Failed to request extension:", error);
-    flashToast(c, "Failed to request extension", { type: "error" });
-    return c.redirect("/expense");
-  }
-});
-expenseRoute.post("/:id/cancel-extension", async (c) => {
-  const id = Number(c.req.param("id"));
-  const db = c.var.db;
-  const user = c.var.auth.user!;
-
-  try {
-    // Verify ownership
-    const [record] = await db
-      .select()
-      .from(invoicePayment)
-      .where(and(eq(invoicePayment.id, id), eq(invoicePayment.userId, user.id)));
-
-    if (!record) {
-      flashToast(c, "Payment not found", { type: "error" });
-      return c.text("Unauthorized", 403);
-    }
-
-    // Check if there's a pending extension to cancel
-    if (record.extensionStatus !== "pending") {
-      flashToast(c, "No pending extension to cancel", { type: "info" });
-      return c.redirect("/expense");
-    }
-
-    // Reset extension fields
-    await db
-      .update(invoicePayment)
-      .set({
-        extensionStatus: "none",
-        extensionRequestedDate: null,
-        extensionReason: null,
-      })
-      .where(eq(invoicePayment.id, id));
-
-    // Handle HTMX request
-    if (c.req.header("HX-Request")) {
-      const expenses = await getExpenseList(db, user.id);
-      return c.html(html`
-        ${ExpensePage(expenses)}
-        <div id="modal-container" hx-swap-oob="innerHTML"></div>
-        ${htmxToast(c, "Extension request cancelled", { type: "success" })}
-      `);
-    }
-
-    // Fallback for non-JS
-    flashToast(c, "Extension request cancelled", { type: "success" });
-    return c.redirect("/expense");
-  } catch (error: any) {
-    console.error("Failed to cancel extension:", error);
-    flashToast(c, "Failed to cancel extension", { type: "error" });
-    return c.redirect("/expense");
-  }
-});
+  },
+);

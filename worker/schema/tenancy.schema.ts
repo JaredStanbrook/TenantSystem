@@ -8,6 +8,7 @@ import { property } from "./property.schema";
 import { room } from "./room.schema";
 
 const emptyToUndefined = (val: unknown) => (val === "" ? undefined : val);
+const lastValue = (val: unknown) => (Array.isArray(val) ? val[val.length - 1] : val);
 
 export const TENANCY_STATUS_VALUES = [
   "pending_agreement",
@@ -58,6 +59,51 @@ export const createTenancyFormSchema = z.object({
   endDate: z.preprocess(emptyToUndefined, z.coerce.date().optional()),
   bondAmount: z.preprocess(emptyToUndefined, z.coerce.number().optional()),
 });
+
+export const legacyTenancyOnboardingFormSchema = z
+  .object({
+    email: z.email(),
+    propertyId: z.coerce.number(),
+    roomId: z.coerce.number(),
+    leaseStartDate: z.coerce.date(),
+    leaseEndDate: z.preprocess(emptyToUndefined, z.coerce.date().optional()),
+    billedUpToDate: z.coerce.date(),
+    previousRentAmount: z.coerce.number().positive(),
+    previousFrequency: z.enum(["weekly", "fortnightly", "monthly"]),
+    bondAmount: z.preprocess(emptyToUndefined, z.coerce.number().optional()),
+    bondPaid: z.preprocess(
+      (value) => {
+        const resolved = lastValue(value);
+        return resolved === "true" || resolved === "on" || resolved === true;
+      },
+      z.boolean(),
+    ),
+  })
+  .superRefine((data, ctx) => {
+    if (data.leaseEndDate && data.leaseEndDate <= data.leaseStartDate) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["leaseEndDate"],
+        message: "Lease end date must be after lease start date.",
+      });
+    }
+
+    if (data.billedUpToDate < data.leaseStartDate) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["billedUpToDate"],
+        message: "Billed up to date cannot be before lease start date.",
+      });
+    }
+
+    if (data.leaseEndDate && data.billedUpToDate > data.leaseEndDate) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["billedUpToDate"],
+        message: "Billed up to date cannot be after lease end date.",
+      });
+    }
+  });
 
 export const updateTenancyFormSchema = createTenancyFormSchema
   .omit({ email: true })

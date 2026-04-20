@@ -195,6 +195,49 @@ export const AdminTools = ({
             </button>
           </form>
         </div>
+
+        <div class="rounded-2xl border bg-card p-6 shadow-sm space-y-4">
+          <div class="space-y-1">
+            <h3 class="text-lg font-semibold">Flush tenant account</h3>
+            <p class="text-sm text-muted-foreground">
+              Permanently erase a tenant user and all tenancy and billing records tied to them.
+            </p>
+          </div>
+
+          <form
+            hx-post="/admin/tools/flush-tenant-account"
+            hx-target="#main-content"
+            hx-swap="innerHTML"
+            class="space-y-3"
+          >
+            <label class="text-sm font-medium">Tenant user</label>
+            <select
+              name="userId"
+              required
+              class="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">Select a tenant account</option>
+              ${usersList.map(
+                (user) => html`
+                  <option value="${user.id}" ${selectedUserId === user.id ? "selected" : ""}>
+                    ${(user.displayName || user.email) + " (" + user.email + ")"}
+                  </option>
+                `,
+              )}
+            </select>
+
+            <div class="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-xs text-muted-foreground">
+              Destructive action. Intended for tenant/user accounts only, not property owners or admins.
+            </div>
+
+            <button
+              type="submit"
+              class="inline-flex h-10 items-center justify-center rounded-lg bg-destructive px-4 text-sm font-medium text-destructive-foreground shadow hover:bg-destructive/90"
+            >
+              Erase tenant account
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   `;

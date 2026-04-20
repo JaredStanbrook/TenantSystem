@@ -1,16 +1,7 @@
-import { PDFDocument, StandardFonts, rgb, RGB } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb, type RGB } from "pdf-lib";
 
-type InvoicePdfPayment = {
-  userDisplayName?: string | null;
-  userEmail?: string | null;
-  userId: string;
-  amountOwed: number;
-  amountPaid: number;
-  status: string;
-};
-
-type InvoicePdfData = {
-  invoiceId: number;
+export type InvoicePdfData = {
+  invoiceLabel: string;
   propertyLabel: string;
   propertyAddress: string;
   invoiceType: string;
@@ -20,7 +11,10 @@ type InvoicePdfData = {
   issuedDate: Date | null;
   createdAt: Date | null;
   description?: string | null;
-  payments: InvoicePdfPayment[];
+  tenantName: string;
+  tenantEmail: string;
+  startDate?: Date | null;
+  endDate?: Date | null;
 };
 
 // Color palette for professional invoice
@@ -43,12 +37,15 @@ const formatDate = (value: Date | null | undefined) =>
 // Status color mapping
 const getStatusColor = (status: string): RGB => {
   const statusLower = status.toLowerCase();
-  if (statusLower.includes("paid") || statusLower.includes("complete"))
+  if (statusLower.includes("paid") || statusLower.includes("complete")) {
     return COLORS.success;
-  if (statusLower.includes("partial") || statusLower.includes("pending"))
+  }
+  if (statusLower.includes("partial") || statusLower.includes("pending")) {
     return COLORS.warning;
-  if (statusLower.includes("overdue") || statusLower.includes("unpaid"))
+  }
+  if (statusLower.includes("overdue") || statusLower.includes("unpaid") || statusLower.includes("void")) {
     return COLORS.danger;
+  }
   return COLORS.textLight;
 };
 
@@ -67,7 +64,6 @@ export const buildInvoicePdf = async (
   const contentWidth = pageSize[0] - marginX * 2;
   const lineHeight = 10;
 
-  // Helper: Draw text
   const drawText = (
     text: string,
     options?: {
@@ -83,7 +79,6 @@ export const buildInvoicePdf = async (
     const usedFont = options?.bold ? fontBold : font;
     let xPos = options?.x ?? marginX;
 
-    // Handle alignment
     if (options?.align === "right") {
       const textWidth = usedFont.widthOfTextAtSize(text, size);
       xPos = marginX + contentWidth - textWidth;
@@ -113,7 +108,6 @@ export const buildInvoicePdf = async (
     });
   };
 
-  // Helper: Draw horizontal line
   const drawLine = (thickness = 1, color = COLORS.border, yOffset = 0) => {
     page.drawLine({
       start: { x: marginX, y: y + yOffset },
@@ -123,17 +117,15 @@ export const buildInvoicePdf = async (
     });
   };
 
-  // Helper: Ensure space on page
   const ensureSpace = (needed: number) => {
     if (y - needed < 50) {
       page = pdfDoc.addPage(pageSize);
       y = pageSize[1] - 50;
-      return true; // New page created
+      return true;
     }
     return false;
   };
 
-  // Helper: Draw section header
   const drawSectionHeader = (title: string) => {
     ensureSpace(30);
     y -= 10;
@@ -162,12 +154,11 @@ export const buildInvoicePdf = async (
   // =========================
   ensureSpace(100);
 
-  // Two-column layout for invoice details
   const rightColX = marginX + contentWidth / 2 + 20;
   const savedY = y;
 
   // Left column
-  drawText(`Invoice #${data.invoiceId}`, {
+  drawText(data.invoiceLabel, {
     size: 16,
     bold: true,
     color: COLORS.primary,
@@ -199,14 +190,13 @@ export const buildInvoicePdf = async (
   y -= 18;
   drawText(data.propertyLabel, { x: rightColX, bold: true, size: 11 });
   y -= 14;
-  drawText(data.propertyAddress, {
+  drawText(data.propertyAddress || "-", {
     x: rightColX,
     size: 9,
     color: COLORS.textLight,
   });
   y -= 24;
 
-  // Dates section (right column)
   const dateY = y;
   drawText("Issued:", {
     x: rightColX,
@@ -244,7 +234,6 @@ export const buildInvoicePdf = async (
   y = Math.min(y, dateY - 42);
   y -= 20;
 
-  // Divider
   drawLine(1.5, COLORS.primary);
   y -= 20;
 
@@ -259,37 +248,12 @@ export const buildInvoicePdf = async (
     color: COLORS.primary,
   });
   y -= 5;
-  const totalText = formatMoney(data.totalAmount);
-  drawTextRight(totalText, marginX + contentWidth, {
+  drawTextRight(formatMoney(data.totalAmount), marginX + contentWidth, {
     size: 22,
     bold: true,
     color: COLORS.primary,
   });
-  y -= 20;
-
-  // Calculate total paid
-  const totalPaid = data.payments.reduce((sum, p) => sum + p.amountPaid, 0);
-  const totalOwed = data.payments.reduce((sum, p) => sum + p.amountOwed, 0);
-  const remainingBalance = totalOwed - totalPaid;
-
-  drawText("Total Paid:", { size: 9, color: COLORS.textLight });
-  drawTextRight(formatMoney(totalPaid), marginX + contentWidth, {
-    size: 10,
-    color: COLORS.success,
-  });
-  y -= 14;
-
-  if (remainingBalance > 0) {
-    drawText("Remaining Balance:", { size: 9, color: COLORS.textLight });
-    drawTextRight(formatMoney(remainingBalance), marginX + contentWidth, {
-      size: 10,
-      bold: true,
-      color: COLORS.danger,
-    });
-    y -= 14;
-  }
-
-  y -= 10;
+  y -= 24;
 
   // =========================
   // DESCRIPTION SECTION
@@ -306,50 +270,92 @@ export const buildInvoicePdf = async (
   }
 
   // =========================
-  // PAYMENTS SECTION
+  // TENANT DETAILS SECTION
   // =========================
-  drawSectionHeader("Payment Details");
+  drawSectionHeader("Tenant Details");
+  ensureSpace(48);
 
-  if (data.payments.length === 0) {
-    ensureSpace(30);
-    drawText("No payments recorded.", {
+  y += 6;
+  const tenantHeaderY = y;
+  const colLabel = marginX + 10;
+  const colValue = marginX + 150;
+
+  page.drawText("Field", {
+    x: colLabel,
+    y: tenantHeaderY,
+    size: 10,
+    font: fontBold,
+    color: COLORS.primary,
+  });
+  page.drawText("Value", {
+    x: colValue,
+    y: tenantHeaderY,
+    size: 10,
+    font: fontBold,
+    color: COLORS.primary,
+  });
+
+  y -= 10;
+  drawLine(1.5, COLORS.primary);
+  y -= 20;
+
+  const tenantRows = [
+    ["Tenant", data.tenantName || "-"],
+    ["Email", data.tenantEmail || "-"],
+  ];
+
+  tenantRows.forEach(([label, value], index) => {
+    ensureSpace(lineHeight * 2);
+    page.drawText(label, {
+      x: colLabel,
+      y,
       size: 10,
-      color: COLORS.textLight,
-      align: "center",
+      font,
+      color: COLORS.text,
     });
-    y -= 30;
-  } else {
-    ensureSpace(50);
+    page.drawText(value, {
+      x: colValue,
+      y,
+      size: 10,
+      font,
+      color: COLORS.text,
+    });
+    y -= lineHeight;
 
-    // Table header with background
+    if (index < tenantRows.length - 1) {
+      page.drawLine({
+        start: { x: marginX, y: y + 4 },
+        end: { x: marginX + contentWidth, y: y + 4 },
+        thickness: 0.5,
+        color: rgb(0.92, 0.92, 0.92),
+      });
+      y -= 8;
+    }
+  });
+
+  // =========================
+  // BILLING PERIOD SECTION
+  // =========================
+  if (data.startDate || data.endDate) {
+    y -= 10;
+    drawSectionHeader("Billing Period");
+    ensureSpace(48);
+
     y += 6;
-    const headerY = y;
+    const periodHeaderY = y;
+    const colStart = marginX + 10;
+    const colEnd = marginX + contentWidth - 120;
 
-    const colTenant = marginX + 10;
-    const colOwedRight = marginX + contentWidth - 210;
-    const colPaidRight = marginX + contentWidth - 110;
-    const colStatus = marginX + contentWidth - 70;
-
-    page.drawText("Tenant", {
-      x: colTenant,
-      y: headerY,
+    page.drawText("Start Date", {
+      x: colStart,
+      y: periodHeaderY,
       size: 10,
       font: fontBold,
       color: COLORS.primary,
     });
-    drawTextRight("Amount Owed", colOwedRight, {
-      size: 10,
-      bold: true,
-      color: COLORS.primary,
-    });
-    drawTextRight("Paid", colPaidRight, {
-      size: 10,
-      bold: true,
-      color: COLORS.primary,
-    });
-    page.drawText("Status", {
-      x: colStatus,
-      y: headerY,
+    page.drawText("End Date", {
+      x: colEnd,
+      y: periodHeaderY,
       size: 10,
       font: fontBold,
       color: COLORS.primary,
@@ -359,66 +365,21 @@ export const buildInvoicePdf = async (
     drawLine(1.5, COLORS.primary);
     y -= 20;
 
-    // Table rows
-    data.payments.forEach((payment, index) => {
-      ensureSpace(lineHeight * 2);
-
-      const tenantLabel =
-        payment.userDisplayName || payment.userEmail || payment.userId;
-
-      // Truncate long tenant names
-      const maxTenantWidth = contentWidth - 290;
-      let displayName = tenantLabel;
-      const nameWidth = font.widthOfTextAtSize(displayName, 10);
-      if (nameWidth > maxTenantWidth) {
-        while (
-          font.widthOfTextAtSize(displayName + "...", 10) > maxTenantWidth &&
-          displayName.length > 0
-        ) {
-          displayName = displayName.slice(0, -1);
-        }
-        displayName += "...";
-      }
-
-      page.drawText(displayName, {
-        x: colTenant,
-        y,
-        size: 10,
-        font,
-        color: COLORS.text,
-      });
-
-      drawTextRight(formatMoney(payment.amountOwed), colOwedRight, {
-        size: 10,
-        color: COLORS.text,
-      });
-
-      drawTextRight(formatMoney(payment.amountPaid), colPaidRight, {
-        size: 10,
-        color: payment.amountPaid > 0 ? COLORS.success : COLORS.textLight,
-      });
-
-      page.drawText(payment.status, {
-        x: colStatus,
-        y,
-        size: 9,
-        font,
-        color: getStatusColor(payment.status),
-      });
-
-      y -= lineHeight;
-
-      // Subtle divider between rows
-      if (index < data.payments.length - 1) {
-        page.drawLine({
-          start: { x: marginX, y: y + 4 },
-          end: { x: marginX + contentWidth, y: y + 4 },
-          thickness: 0.5,
-          color: rgb(0.92, 0.92, 0.92),
-        });
-        y -= 8;
-      }
+    page.drawText(formatDate(data.startDate), {
+      x: colStart,
+      y,
+      size: 10,
+      font,
+      color: COLORS.text,
     });
+    page.drawText(formatDate(data.endDate), {
+      x: colEnd,
+      y,
+      size: 10,
+      font,
+      color: COLORS.text,
+    });
+    y -= lineHeight + 6;
   }
 
   // =========================

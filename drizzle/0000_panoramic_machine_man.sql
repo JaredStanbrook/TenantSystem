@@ -57,6 +57,63 @@ CREATE TABLE `verification_codes` (
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
+CREATE TABLE `bill` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`property_id` integer NOT NULL,
+	`user_id` text NOT NULL,
+	`room_id` integer,
+	`bill_type` text NOT NULL,
+	`description` text,
+	`total_amount` integer NOT NULL,
+	`amount_paid` integer DEFAULT 0 NOT NULL,
+	`status` text DEFAULT 'open' NOT NULL,
+	`due_date` integer NOT NULL,
+	`start_date` integer,
+	`end_date` integer,
+	`issued_date` integer DEFAULT (unixepoch()) NOT NULL,
+	`created_at` integer DEFAULT (unixepoch()) NOT NULL,
+	`paid_at` integer,
+	`tenant_marked_paid_at` integer,
+	`payment_reference` text,
+	`extension_status` text DEFAULT 'none' NOT NULL,
+	`extension_requested_date` integer,
+	`extension_reason` text,
+	`due_date_extension_days` integer DEFAULT 0 NOT NULL,
+	`admin_note` text,
+	`archived_status` text,
+	FOREIGN KEY (`property_id`) REFERENCES `property`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`room_id`) REFERENCES `room`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE TABLE `bond` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`property_id` integer NOT NULL,
+	`user_id` text NOT NULL,
+	`room_id` integer,
+	`description` text,
+	`total_amount` integer NOT NULL,
+	`amount_paid` integer DEFAULT 0 NOT NULL,
+	`status` text DEFAULT 'open' NOT NULL,
+	`due_date` integer NOT NULL,
+	`issued_date` integer DEFAULT (unixepoch()) NOT NULL,
+	`created_at` integer DEFAULT (unixepoch()) NOT NULL,
+	`paid_at` integer,
+	`tenant_marked_paid_at` integer,
+	`payment_reference` text,
+	`extension_status` text DEFAULT 'none' NOT NULL,
+	`extension_requested_date` integer,
+	`extension_reason` text,
+	`due_date_extension_days` integer DEFAULT 0 NOT NULL,
+	`admin_note` text,
+	`idempotency_key` text,
+	`archived_status` text,
+	FOREIGN KEY (`property_id`) REFERENCES `property`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`room_id`) REFERENCES `room`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `bond_idempotency_key_unique` ON `bond` (`idempotency_key`);--> statement-breakpoint
 CREATE TABLE `invoice` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`property_id` integer NOT NULL,
@@ -117,6 +174,36 @@ CREATE TABLE `property` (
 	FOREIGN KEY (`landlord_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
+CREATE TABLE `rent` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`property_id` integer NOT NULL,
+	`user_id` text NOT NULL,
+	`room_id` integer,
+	`description` text,
+	`total_amount` integer NOT NULL,
+	`amount_paid` integer DEFAULT 0 NOT NULL,
+	`status` text DEFAULT 'open' NOT NULL,
+	`due_date` integer NOT NULL,
+	`start_date` integer NOT NULL,
+	`end_date` integer NOT NULL,
+	`issued_date` integer DEFAULT (unixepoch()) NOT NULL,
+	`created_at` integer DEFAULT (unixepoch()) NOT NULL,
+	`paid_at` integer,
+	`tenant_marked_paid_at` integer,
+	`payment_reference` text,
+	`extension_status` text DEFAULT 'none' NOT NULL,
+	`extension_requested_date` integer,
+	`extension_reason` text,
+	`due_date_extension_days` integer DEFAULT 0 NOT NULL,
+	`admin_note` text,
+	`idempotency_key` text,
+	`archived_status` text,
+	FOREIGN KEY (`property_id`) REFERENCES `property`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`room_id`) REFERENCES `room`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `rent_idempotency_key_unique` ON `rent` (`idempotency_key`);--> statement-breakpoint
 CREATE TABLE `role_permissions` (
 	`id` text PRIMARY KEY NOT NULL,
 	`role` text NOT NULL,

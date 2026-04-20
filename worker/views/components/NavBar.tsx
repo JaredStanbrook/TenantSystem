@@ -16,8 +16,12 @@ const menuConfig: Record<string, Array<{ to: string; name: string }>> = {
     { to: "/admin/properties", name: "Properties" },
   ],
   admin: [
+    { to: "/admin", name: "Dashboard" },
     { to: "/admin/tools", name: "Admin Tools" },
     { to: "/admin/logs", name: "System Logs" },
+    { to: "/admin/tenancies", name: "Tenancies" },
+    { to: "/admin/invoices", name: "Invoices" },
+    { to: "/admin/properties", name: "Properties" },
   ],
 };
 
@@ -33,7 +37,8 @@ export const ThemeToggle = () => html`
   <button
     type="button"
     class="theme-toggle-btn inline-flex h-10 w-10 items-center justify-center rounded-lg border border-input bg-transparent hover:bg-accent hover:text-accent-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-ring"
-    aria-label="Toggle theme">
+    aria-label="Toggle theme"
+  >
     <i data-theme-icon="light" data-lucide="sun" class="hidden w-5 h-5"></i>
     <i data-theme-icon="dark" data-lucide="moon" class="hidden w-5 h-5"></i>
     <i data-theme-icon="system" data-lucide="laptop" class="hidden w-5 h-5"></i>
@@ -154,7 +159,8 @@ export const PropertySelector = ({
           </div>
           <i
             data-lucide="chevron-down"
-            class="w-4 h-4 opacity-50 group-open:rotate-180 transition-transform"></i>
+            class="w-4 h-4 opacity-50 group-open:rotate-180 transition-transform"
+          ></i>
         </summary>
 
         <div class="${dropdownClasses}">
@@ -164,7 +170,8 @@ export const PropertySelector = ({
               hx-vals='{"propertyId": "all"}'
               class="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground ${!currentProp
                 ? "bg-accent/50 font-medium"
-                : ""}">
+                : ""}"
+            >
               <span class="truncate">View All Properties</span>
               ${!currentProp ? html`<i data-lucide="check" class="ml-auto h-4 w-4"></i>` : ""}
             </button>
@@ -180,7 +187,8 @@ export const PropertySelector = ({
                     class="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground ${p.id ===
                     Number(currentPropertyId)
                       ? "bg-accent/50 font-medium"
-                      : ""}">
+                      : ""}"
+                  >
                     <span class="truncate text-left">${p.nickname || p.addressLine1}</span>
                     ${p.id === Number(currentPropertyId)
                       ? html`<i data-lucide="check" class="ml-auto h-4 w-4"></i>`
@@ -204,7 +212,8 @@ const UserMenu = ({ user }: { user: PropsUser }) => html`
   <div class="relative">
     <details class="group relative">
       <summary
-        class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-primary/10 hover:bg-primary/20 transition-colors list-none marker:hidden [&::-webkit-details-marker]:hidden border border-transparent focus:border-ring ring-offset-background">
+        class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-primary/10 hover:bg-primary/20 transition-colors list-none marker:hidden [&::-webkit-details-marker]:hidden border border-transparent focus:border-ring ring-offset-background"
+      >
         <span class="font-bold text-sm text-primary"
           >${user.email!.substring(0, 2).toUpperCase()}</span
         >
@@ -212,10 +221,12 @@ const UserMenu = ({ user }: { user: PropsUser }) => html`
 
       <div
         class="fixed inset-0 z-40 hidden"
-        onclick="this.parentNode.removeAttribute('open')"></div>
+        onclick="this.parentNode.removeAttribute('open')"
+      ></div>
 
       <div
-        class="absolute right-0 top-full mt-2 w-56 rounded-lg border bg-popover p-1 text-popover-foreground shadow-md animate-in fade-in zoom-in-95 z-50">
+        class="absolute right-0 top-full mt-2 w-56 rounded-lg border bg-popover p-1 text-popover-foreground shadow-md animate-in fade-in zoom-in-95 z-50"
+      >
         <div class="px-2 py-1.5 text-sm">
           <div class="flex flex-col space-y-1">
             <p class="font-medium leading-none truncate">${user.displayName || "User"}</p>
@@ -225,13 +236,15 @@ const UserMenu = ({ user }: { user: PropsUser }) => html`
         <div class="h-px bg-muted my-1"></div>
         <a
           href="/profile"
-          class="flex w-full items-center rounded-sm px-2 py-2 text-sm hover:bg-accent transition-colors no-underline">
+          class="flex w-full items-center rounded-sm px-2 py-2 text-sm hover:bg-accent transition-colors no-underline"
+        >
           <i data-lucide="user" class="mr-2 h-4 w-4"></i> Profile
         </a>
         <div class="h-px bg-muted my-1"></div>
         <button
           hx-post="/web/auth/logout"
-          class="flex w-full items-center rounded-sm px-2 py-2 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors">
+          class="flex w-full items-center rounded-sm px-2 py-2 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors"
+        >
           <i data-lucide="log-out" class="mr-2 h-4 w-4"></i> Log out
         </button>
       </div>
@@ -284,7 +297,8 @@ export const NavBar = ({ user, currentPath, properties, currentPropertyId }: Nav
 
   return html`
     <header
-      class="fixed top-0 left-0 right-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      class="fixed top-0 left-0 right-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
+    >
       <div class="flex h-14 items-center justify-between px-4">
         <div class="flex items-center gap-6">
           <a href="${user ? "/admin" : "/"}" class="flex items-center gap-2 font-bold text-lg mr-4">
@@ -301,7 +315,8 @@ export const NavBar = ({ user, currentPath, properties, currentPropertyId }: Nav
                     item.to,
                   )
                     ? "text-foreground"
-                    : "text-muted-foreground"}">
+                    : "text-muted-foreground"}"
+                >
                   ${item.name}
                 </a>
               `,
@@ -344,7 +359,8 @@ export const NavBar = ({ user, currentPath, properties, currentPropertyId }: Nav
           <button
             id="mobile-menu-toggle"
             class="lg:hidden inline-flex items-center justify-center p-2 rounded-md text-foreground hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
-            aria-label="Open menu">
+            aria-label="Open menu"
+          >
             <i data-lucide="menu" class="h-6 w-6"></i>
           </button>
         </div>
@@ -353,7 +369,8 @@ export const NavBar = ({ user, currentPath, properties, currentPropertyId }: Nav
 
     <div
       id="mobile-menu"
-      class="hidden fixed inset-0 z-[100] bg-background text-foreground lg:hidden flex flex-col animate-in slide-in-from-right-10 duration-200">
+      class="hidden fixed inset-0 z-[100] bg-background text-foreground lg:hidden flex flex-col animate-in slide-in-from-right-10 duration-200"
+    >
       <div class="flex items-center justify-between px-4 h-14 border-b">
         <span class="font-bold text-lg flex items-center gap-2">
           <div class="h-6 w-6 bg-primary rounded-sm"></div>
@@ -362,7 +379,8 @@ export const NavBar = ({ user, currentPath, properties, currentPropertyId }: Nav
         <button
           id="mobile-menu-close"
           class="p-2 rounded-md hover:bg-accent focus:outline-none"
-          aria-label="Close menu">
+          aria-label="Close menu"
+        >
           <i data-lucide="x" class="h-6 w-6"></i>
         </button>
       </div>
@@ -377,7 +395,8 @@ export const NavBar = ({ user, currentPath, properties, currentPropertyId }: Nav
                   item.to,
                 )
                   ? "bg-accent text-foreground"
-                  : "text-muted-foreground"}">
+                  : "text-muted-foreground"}"
+              >
                 ${item.name}
                 ${isActive(item.to)
                   ? html`<i data-lucide="chevron-right" class="ml-auto h-5 w-5 opacity-50"></i>`
@@ -416,12 +435,14 @@ export const NavBar = ({ user, currentPath, properties, currentPropertyId }: Nav
                 <div class="grid grid-cols-2 gap-4">
                   <a
                     href="/login"
-                    class="inline-flex items-center justify-center rounded-lg h-12 border border-input bg-background px-4 py-2 text-base font-medium hover:bg-accent hover:text-accent-foreground">
+                    class="inline-flex items-center justify-center rounded-lg h-12 border border-input bg-background px-4 py-2 text-base font-medium hover:bg-accent hover:text-accent-foreground"
+                  >
                     Login
                   </a>
                   <a
                     href="/register"
-                    class="inline-flex items-center justify-center rounded-lg h-12 bg-primary px-4 py-2 text-base font-medium text-primary-foreground hover:bg-primary/90">
+                    class="inline-flex items-center justify-center rounded-lg h-12 bg-primary px-4 py-2 text-base font-medium text-primary-foreground hover:bg-primary/90"
+                  >
                     Get Started
                   </a>
                 </div>
@@ -430,7 +451,8 @@ export const NavBar = ({ user, currentPath, properties, currentPropertyId }: Nav
                 <div class="rounded-xl border bg-card text-card-foreground shadow-sm">
                   <div class="p-4 flex items-center gap-3 border-b">
                     <div
-                      class="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary font-bold">
+                      class="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary font-bold"
+                    >
                       ${user.email!.substring(0, 2).toUpperCase()}
                     </div>
                     <div class="flex flex-col min-w-0">
@@ -441,12 +463,14 @@ export const NavBar = ({ user, currentPath, properties, currentPropertyId }: Nav
                   <div class="p-2 grid grid-cols-2 gap-2">
                     <a
                       href="/profile"
-                      class="flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-accent transition-colors">
+                      class="flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-accent transition-colors"
+                    >
                       <i data-lucide="user" class="h-4 w-4"></i> Profile
                     </a>
                     <button
                       hx-post="/web/auth/logout"
-                      class="flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors">
+                      class="flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors"
+                    >
                       <i data-lucide="log-out" class="h-4 w-4"></i> Log out
                     </button>
                   </div>

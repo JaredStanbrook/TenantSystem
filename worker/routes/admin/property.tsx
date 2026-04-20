@@ -2,9 +2,11 @@ import { Hono } from "hono";
 import { html } from "hono/html";
 import { getCookie } from "hono/cookie";
 import { zValidator } from "@hono/zod-validator";
+import { bill } from "@server/schema/bill.schema";
+import { bond } from "@server/schema/bond.schema";
 import { property, formPropertySchema } from "@server/schema/property.schema";
 import { room, RoomStatus } from "@server/schema/room.schema";
-import { invoice } from "@server/schema/invoice.schema";
+import { rent } from "@server/schema/rent.schema";
 import { sharedExpense } from "@server/schema/sharedExpense.schema";
 import { tenancy } from "@server/schema/tenancy.schema";
 import { eq, desc, and, isNull, sql } from "drizzle-orm";
@@ -23,20 +25,24 @@ import { currencyConvertor } from "@server/lib/utils";
 import { addDays, addMonths, startOfDay } from "date-fns";
 
 export const propertyRoute = new Hono<AppEnv>();
+const isAdminUser = (roles: string[]) => roles.includes("admin");
 
 // 1. GET /admin/properties -> Render List
 propertyRoute.get("/", async (c) => {
   const db = c.var.db;
-  const userId = c.var.auth.user!.id;
+  const user = c.var.auth.user!;
+  const userId = user.id;
+  const isAdmin = isAdminUser(user.roles);
   const showAll = c.req.query("showAll") === "true";
 
   const properties = await db
     .select()
     .from(property)
     .where(
-      showAll
-        ? eq(property.landlordId, userId)
-        : and(eq(property.landlordId, userId), isNull(property.deletedAt)),
+      and(
+        isAdmin ? undefined : eq(property.landlordId, userId),
+        showAll ? undefined : isNull(property.deletedAt),
+      ),
     )
     .orderBy(desc(property.createdAt));
   htmxPushUrl(c, c.req.url);
@@ -46,7 +52,9 @@ propertyRoute.get("/", async (c) => {
 propertyRoute.get("/:propId/rooms", async (c) => {
   const db = c.var.db;
   const propId = Number(c.req.param("propId"));
-  const userId = c.var.auth.user!.id;
+  const user = c.var.auth.user!;
+  const userId = user.id;
+  const isAdmin = isAdminUser(user.roles);
 
   // Verify Property Ownership
   const [prop] = await db
@@ -55,7 +63,7 @@ propertyRoute.get("/:propId/rooms", async (c) => {
     .where(
       and(
         eq(property.id, propId),
-        eq(property.landlordId, userId),
+        isAdmin ? undefined : eq(property.landlordId, userId),
         isNull(property.deletedAt),
       ),
     );
@@ -111,7 +119,9 @@ propertyRoute.post(
   async (c) => {
     const db = c.var.db;
     const data = c.req.valid("form");
-    const userId = c.var.auth.user!.id;
+    const user = c.var.auth.user!;
+    const userId = user.id;
+    const isAdmin = isAdminUser(user.roles);
     data.rentAmount = currencyConvertor(data.rentAmount.toString());
     // Use explicit first billing date from form, with fallback for older clients.
     let nextBillingDate: Date;
@@ -167,7 +177,7 @@ propertyRoute.post(
     const properties = await db
       .select()
       .from(property)
-      .where(and(eq(property.landlordId, userId), isNull(property.deletedAt)))
+      .where(and(isAdmin ? undefined : eq(property.landlordId, userId), isNull(property.deletedAt)))
       .orderBy(desc(property.createdAt));
 
     const selectedPropertyId = getCookie(c, "selected_property_id");
@@ -195,13 +205,15 @@ propertyRoute.post(
 propertyRoute.get("/:id/edit", async (c) => {
   const db = c.var.db;
   const id = Number(c.req.param("id"));
-  const userId = c.var.auth.user!.id;
+  const user = c.var.auth.user!;
+  const userId = user.id;
+  const isAdmin = isAdminUser(user.roles);
 
   const [prop] = await db
     .select()
     .from(property)
     .where(and(eq(property.id, id), isNull(property.deletedAt)));
-  if (!prop || prop.landlordId !== userId) {
+  if (!prop || (!isAdmin && prop.landlordId !== userId)) {
     htmxToast(c, "Unauthorized Access", { type: "error" });
     return c.text("Unauthorized", 401);
   }
@@ -243,7 +255,9 @@ propertyRoute.post(
     const db = c.var.db;
     const id = Number(c.req.param("id"));
     const data = c.req.valid("form");
-    const userId = c.var.auth.user!.id;
+    const user = c.var.auth.user!;
+    const userId = user.id;
+    const isAdmin = isAdminUser(user.roles);
 
     const currentRooms = await db
       .select()
@@ -256,7 +270,7 @@ propertyRoute.post(
       .where(and(eq(property.id, id), isNull(property.deletedAt)))
       .then((res) => res[0]);
 
-    if (!existing || existing.landlordId !== userId)
+    if (!existing || (!isAdmin && existing.landlordId !== userId))
       return c.text("Unauthorized", 401);
 
     const currentCount = currentRooms.length;
@@ -402,7 +416,7 @@ propertyRoute.post(
     const properties = await db
       .select()
       .from(property)
-      .where(and(eq(property.landlordId, userId), isNull(property.deletedAt)))
+      .where(and(isAdmin ? undefined : eq(property.landlordId, userId), isNull(property.deletedAt)))
       .orderBy(desc(property.createdAt));
 
     const selectedPropertyId = getCookie(c, "selected_property_id");
@@ -430,7 +444,9 @@ propertyRoute.post(
 propertyRoute.delete("/:id", async (c) => {
   const db = c.var.db;
   const id = Number(c.req.param("id"));
-  const userId = c.var.auth.user!.id;
+  const user = c.var.auth.user!;
+  const userId = user.id;
+  const isAdmin = isAdminUser(user.roles);
   const body = await c.req.parseBody();
   const forceQuery = c.req.query("force");
   const archiveConfirmQuery = c.req.query("archiveConfirm");
@@ -446,7 +462,7 @@ propertyRoute.delete("/:id", async (c) => {
     .from(property)
     .where(eq(property.id, id));
 
-  if (!existing || existing.landlordId !== userId)
+  if (!existing || (!isAdmin && existing.landlordId !== userId))
     return c.text("Unauthorized", 401);
 
   if (!existing.deletedAt && !archiveConfirm) {
@@ -517,12 +533,26 @@ propertyRoute.delete("/:id", async (c) => {
         .set({ deletedAt: now })
         .where(eq(sharedExpense.propertyId, id)),
       db
-        .update(invoice)
+        .update(rent)
         .set({
-          archivedStatus: sql`coalesce(${invoice.archivedStatus}, ${invoice.status})`,
+          archivedStatus: sql`coalesce(${rent.archivedStatus}, ${rent.status})`,
           status: "void",
         })
-        .where(eq(invoice.propertyId, id)),
+        .where(eq(rent.propertyId, id)),
+      db
+        .update(bond)
+        .set({
+          archivedStatus: sql`coalesce(${bond.archivedStatus}, ${bond.status})`,
+          status: "void",
+        })
+        .where(eq(bond.propertyId, id)),
+      db
+        .update(bill)
+        .set({
+          archivedStatus: sql`coalesce(${bill.archivedStatus}, ${bill.status})`,
+          status: "void",
+        })
+        .where(eq(bill.propertyId, id)),
       db
         .update(tenancy)
         .set({
@@ -534,7 +564,9 @@ propertyRoute.delete("/:id", async (c) => {
   } else {
     await db.batch([
       db.delete(tenancy).where(eq(tenancy.propertyId, id)),
-      db.delete(invoice).where(eq(invoice.propertyId, id)),
+      db.delete(rent).where(eq(rent.propertyId, id)),
+      db.delete(bond).where(eq(bond.propertyId, id)),
+      db.delete(bill).where(eq(bill.propertyId, id)),
       db.delete(sharedExpense).where(eq(sharedExpense.propertyId, id)),
       db.delete(room).where(eq(room.propertyId, id)),
       db.delete(property).where(eq(property.id, id)),
@@ -544,7 +576,7 @@ propertyRoute.delete("/:id", async (c) => {
   const properties = await db
     .select()
     .from(property)
-    .where(and(eq(property.landlordId, userId), isNull(property.deletedAt)));
+    .where(and(isAdmin ? undefined : eq(property.landlordId, userId), isNull(property.deletedAt)));
   const selectedPropertyId = getCookie(c, "selected_property_id");
 
   htmxToast(c, existing.deletedAt ? "Property Deleted" : "Property Archived", {
@@ -572,12 +604,14 @@ propertyRoute.delete("/:id", async (c) => {
 propertyRoute.post("/:id/restore", async (c) => {
   const db = c.var.db;
   const id = Number(c.req.param("id"));
-  const userId = c.var.auth.user!.id;
+  const user = c.var.auth.user!;
+  const userId = user.id;
+  const isAdmin = isAdminUser(user.roles);
   const showAll = c.req.query("showAll") === "true";
 
   const [existing] = await db.select().from(property).where(eq(property.id, id));
 
-  if (!existing || existing.landlordId !== userId) return c.text("Unauthorized", 401);
+  if (!existing || (!isAdmin && existing.landlordId !== userId)) return c.text("Unauthorized", 401);
 
   await db.batch([
     db
@@ -590,12 +624,26 @@ propertyRoute.post("/:id/restore", async (c) => {
       .set({ deletedAt: null })
       .where(eq(sharedExpense.propertyId, id)),
     db
-      .update(invoice)
+      .update(rent)
       .set({
-        status: sql`coalesce(${invoice.archivedStatus}, ${invoice.status})`,
+        status: sql`coalesce(${rent.archivedStatus}, ${rent.status})`,
         archivedStatus: null,
       })
-      .where(eq(invoice.propertyId, id)),
+      .where(eq(rent.propertyId, id)),
+    db
+      .update(bond)
+      .set({
+        status: sql`coalesce(${bond.archivedStatus}, ${bond.status})`,
+        archivedStatus: null,
+      })
+      .where(eq(bond.propertyId, id)),
+    db
+      .update(bill)
+      .set({
+        status: sql`coalesce(${bill.archivedStatus}, ${bill.status})`,
+        archivedStatus: null,
+      })
+      .where(eq(bill.propertyId, id)),
     db
       .update(tenancy)
       .set({
@@ -608,7 +656,7 @@ propertyRoute.post("/:id/restore", async (c) => {
   const properties = await db
     .select()
     .from(property)
-    .where(and(eq(property.landlordId, userId), isNull(property.deletedAt)));
+    .where(and(isAdmin ? undefined : eq(property.landlordId, userId), isNull(property.deletedAt)));
   const selectedPropertyId = getCookie(c, "selected_property_id");
 
   htmxToast(c, "Property Restored", { type: "success" });

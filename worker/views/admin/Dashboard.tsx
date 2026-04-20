@@ -1,9 +1,8 @@
 import { html } from "hono/html";
 import { Property } from "../../schema/property.schema";
-import { Invoice } from "../../schema/invoice.schema";
+import type { BillingListItem } from "../../services/billing.service";
 import { capitalize, formatCents } from "../lib/utils";
 
-// Define the shape of data passed from the backend
 export interface DashboardMetrics {
   totalRooms: number;
   occupiedRooms: number;
@@ -12,24 +11,22 @@ export interface DashboardMetrics {
   activeTenants: number;
   occupancyRate: number;
   invoiceDistribution: { type: string; amount: number }[];
-  recentInvoices: Invoice[];
-  dueNextInvoices: Invoice[];
+  recentInvoices: BillingListItem[];
+  dueNextInvoices: BillingListItem[];
   dueWindowDays: number;
   financials: {
+    grossRentalIncome: number;
     overdueAmount: number;
     pendingAmount: number;
     dueNextAmount: number;
   };
 }
 
-// --- Helper Functions ---
-
-const formatDate = (date: Date | string | number) => {
-  return new Date(date).toLocaleDateString("en-AU", {
+const formatDate = (date: Date | string | number) =>
+  new Date(date).toLocaleDateString("en-AU", {
     month: "short",
     day: "numeric",
   });
-};
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -40,11 +37,12 @@ const getStatusColor = (status: string) => {
     case "void":
       return "text-gray-600 bg-gray-100 dark:bg-gray-800 dark:text-gray-400";
     default:
-      return "text-blue-600 bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400"; // open/draft
+      return "text-blue-600 bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400";
   }
 };
 
-// --- Components ---
+const typeLabel = (record: BillingListItem) =>
+  record.recordType === "bill" ? capitalize(record.category) : capitalize(record.recordType);
 
 const StatCard = ({
   title,
@@ -64,22 +62,18 @@ const StatCard = ({
   >
     <div>
       <div class="flex flex-row items-center justify-between space-y-0 pb-2">
-        <h3 class="tracking-tight text-sm font-medium text-muted-foreground">
-          ${title}
-        </h3>
+        <h3 class="tracking-tight text-sm font-medium text-muted-foreground">${title}</h3>
         <div class="h-4 w-4 text-muted-foreground ${accentColor || ""}">
           <i data-lucide="${icon}"></i>
         </div>
       </div>
       <div class="text-2xl font-bold">${value}</div>
     </div>
-    ${subtext &&
-    html`<p class="text-xs text-muted-foreground mt-2">${subtext}</p>`}
+    ${subtext ? html`<p class="text-xs text-muted-foreground mt-2">${subtext}</p>` : ""}
   </div>
 `;
 
-// Responsive Invoice List Item
-const RecentInvoiceItem = (invoice: Invoice) => html`
+const RecentInvoiceItem = (record: BillingListItem) => html`
   <div
     class="flex flex-col sm:flex-row sm:items-center justify-between p-4 border-b last:border-0 hover:bg-muted/40 transition-colors gap-2"
   >
@@ -90,34 +84,30 @@ const RecentInvoiceItem = (invoice: Invoice) => html`
         <i data-lucide="file-text" class="h-4 w-4"></i>
       </div>
       <div>
-        <div class="font-medium text-sm text-foreground capitalize">
-          ${invoice.type} Invoice
+        <div class="font-medium text-sm text-foreground">
+          ${record.displayNumber} · ${typeLabel(record)}
         </div>
         <div class="text-xs text-muted-foreground">
-          Issued ${formatDate(invoice.createdAt)} · Due
-          ${formatDate(invoice.dueDate)}
+          ${record.tenantName} · Issued ${formatDate(record.createdAt)} · Due
+          ${formatDate(record.dueDate)}
         </div>
       </div>
     </div>
 
-    <div
-      class="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto"
-    >
+    <div class="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto">
       <span
         class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ring-1 ring-inset ring-black/5 ${getStatusColor(
-          invoice.status,
+          record.status,
         )}"
       >
-        ${capitalize(invoice.status)}
+        ${capitalize(record.status)}
       </span>
-      <span class="font-semibold text-sm w-20 text-right"
-        >${formatCents(invoice.totalAmount)}</span
-      >
+      <span class="font-semibold text-sm w-20 text-right">${formatCents(record.totalAmount)}</span>
     </div>
   </div>
 `;
 
-const DueInvoiceItem = (invoice: Invoice) => html`
+const DueInvoiceItem = (record: BillingListItem) => html`
   <div
     class="flex items-center justify-between p-3 border-b last:border-0 hover:bg-muted/40 transition-colors"
   >
@@ -128,21 +118,19 @@ const DueInvoiceItem = (invoice: Invoice) => html`
         <i data-lucide="calendar" class="h-3.5 w-3.5"></i>
       </div>
       <div>
-        <div class="font-medium text-sm text-foreground capitalize">
-          ${invoice.type} Invoice
+        <div class="font-medium text-sm text-foreground">
+          ${record.displayNumber} · ${typeLabel(record)}
         </div>
         <div class="text-xs text-muted-foreground">
-          Due ${formatDate(invoice.dueDate)}
+          ${record.tenantName} · Due ${formatDate(record.dueDate)}
         </div>
       </div>
     </div>
     <span class="font-semibold text-sm"
-      >${formatCents(invoice.totalAmount)}</span
+      >${formatCents(record.totalAmount - (record.amountPaid || 0))}</span
     >
   </div>
 `;
-
-// --- Main View ---
 
 export const Dashboard = ({
   property,
@@ -151,7 +139,6 @@ export const Dashboard = ({
   property: Property | null;
   metrics: DashboardMetrics | null;
 }) => {
-  // 1. Empty State
   if (!property || !metrics) {
     return html`
       <div class="container max-w-7xl mx-auto px-4 py-8 pt-20">
@@ -159,14 +146,9 @@ export const Dashboard = ({
           class="flex flex-col items-center justify-center text-center p-12 border-2 border-dashed rounded-xl bg-muted/10"
         >
           <div class="p-4 bg-muted rounded-full mb-4">
-            <i
-              data-lucide="building-2"
-              class="w-8 h-8 text-muted-foreground"
-            ></i>
+            <i data-lucide="building-2" class="w-8 h-8 text-muted-foreground"></i>
           </div>
-          <h2 class="text-2xl font-bold tracking-tight">
-            No Property Selected
-          </h2>
+          <h2 class="text-2xl font-bold tracking-tight">No Property Selected</h2>
           <p class="text-muted-foreground mt-2 max-w-md">
             Select a property to view its dashboard.
           </p>
@@ -175,15 +157,11 @@ export const Dashboard = ({
     `;
   }
 
-  // 2. Dashboard Content
-
   return html`
     <div
       class="container max-w-7xl mx-auto px-4 py-8 pt-20 animate-in fade-in duration-500 space-y-8"
     >
-      <div
-        class="flex flex-col md:flex-row md:items-center justify-between gap-4"
-      >
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 class="text-3xl font-bold tracking-tight">Dashboard</h2>
           <p class="text-muted-foreground mt-1">
@@ -202,7 +180,14 @@ export const Dashboard = ({
         </button>
       </div>
 
-      <div class="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
+        ${StatCard({
+          title: "Gross Rental Income",
+          value: formatCents(metrics.financials.grossRentalIncome),
+          icon: "banknote",
+          accentColor: "text-emerald-500",
+          subtext: "Total rent collected to date",
+        })}
         ${StatCard({
           title: "Overdue",
           value: formatCents(metrics.financials.overdueAmount),
@@ -215,10 +200,10 @@ export const Dashboard = ({
           value: formatCents(metrics.financials.pendingAmount),
           icon: "clock",
           accentColor: "text-blue-500",
-          subtext: "All open & partial invoices",
+          subtext: "All open & partial billing records",
         })}
         ${StatCard({
-          title: "Next Cycle Due",
+          title: "Current Cycle Due",
           value: formatCents(metrics.financials.dueNextAmount),
           icon: "calendar",
           accentColor: "text-amber-500",
@@ -235,23 +220,17 @@ export const Dashboard = ({
       <div class="grid gap-4 grid-cols-1 lg:grid-cols-3">
         <div class="rounded-xl border bg-card text-card-foreground shadow-sm">
           <div class="flex items-center justify-between p-6 pb-2">
-            <h3
-              class="font-semibold leading-none tracking-tight flex items-center gap-2"
-            >
-              <i
-                data-lucide="calendar"
-                class="w-4 h-4 text-muted-foreground"
-              ></i>
-              Due Next Cycle
+            <h3 class="font-semibold leading-none tracking-tight flex items-center gap-2">
+              <i data-lucide="calendar" class="w-4 h-4 text-muted-foreground"></i>
+              Due Current Cycle
             </h3>
             <a
               hx-get="/admin/invoices"
               hx-target="#main-content"
               hx-push-url="true"
               class="text-xs text-primary hover:underline"
+              >View All</a
             >
-              View All
-            </a>
           </div>
           <div class="p-2">
             ${metrics.dueNextInvoices.length > 0
@@ -259,7 +238,7 @@ export const Dashboard = ({
                   ${metrics.dueNextInvoices.map(DueInvoiceItem)}
                 </div>`
               : html`<div class="p-6 text-center text-muted-foreground text-sm">
-                  No invoices due in the next ${metrics.dueWindowDays} days.
+                  No billing due in the next ${metrics.dueWindowDays} days.
                 </div>`}
           </div>
         </div>
@@ -268,23 +247,17 @@ export const Dashboard = ({
           class="lg:col-span-2 rounded-xl border bg-card text-card-foreground shadow-sm flex flex-col"
         >
           <div class="flex flex-row items-center justify-between p-6 pb-2">
-            <h3
-              class="font-semibold leading-none tracking-tight flex items-center gap-2"
-            >
-              <i
-                data-lucide="activity"
-                class="w-4 h-4 text-muted-foreground"
-              ></i>
-              Recent Invoices
+            <h3 class="font-semibold leading-none tracking-tight flex items-center gap-2">
+              <i data-lucide="activity" class="w-4 h-4 text-muted-foreground"></i>
+              Recent Billing
             </h3>
             <a
               hx-get="/admin/invoices"
               hx-target="#main-content"
               hx-push-url="true"
               class="text-xs text-primary hover:underline"
+              >View All</a
             >
-              View All
-            </a>
           </div>
           <div class="p-2">
             ${metrics.recentInvoices.length > 0
@@ -292,7 +265,7 @@ export const Dashboard = ({
                   ${metrics.recentInvoices.map(RecentInvoiceItem)}
                 </div>`
               : html`<div class="p-8 text-center text-muted-foreground text-sm">
-                  No recent invoices found.
+                  No recent billing found.
                 </div>`}
           </div>
         </div>
@@ -300,11 +273,7 @@ export const Dashboard = ({
 
       <div class="grid gap-4 grid-cols-1 lg:grid-cols-2">
         <div class="rounded-xl border bg-muted/30 p-4">
-          <h4
-            class="text-xs font-semibold uppercase text-muted-foreground mb-3"
-          >
-            Quick Actions
-          </h4>
+          <h4 class="text-xs font-semibold uppercase text-muted-foreground mb-3">Quick Actions</h4>
           <div class="space-y-2">
             <button
               hx-get="/admin/invoices/create"
@@ -317,7 +286,7 @@ export const Dashboard = ({
               >
                 <i data-lucide="plus"></i>
               </div>
-              Create New Invoice
+              Create Billing Record
             </button>
             <button
               hx-get="/admin/tenancies/create"

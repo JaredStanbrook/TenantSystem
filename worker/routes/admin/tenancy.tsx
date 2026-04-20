@@ -7,13 +7,20 @@ import { ConfirmationDialog } from "@views/components/ConfirmationDialog";
 import { TenancyStatusManager } from "@views/tenancies/TenancyComponents";
 import {
   createTenancyFormSchema,
+  legacyTenancyOnboardingFormSchema,
   updateTenancyFormSchema,
   tenancy,
 } from "@server/schema/tenancy.schema";
 import { property } from "@server/schema/property.schema";
 import { room } from "@server/schema/room.schema"; // Import Room
 import { users } from "@server/schema/auth.schema";
-import { TenancyTable, TenancyForm } from "@views/tenancies/TenancyComponents";
+import {
+  LegacyRoomAssignment,
+  LegacyRoomPreview,
+  LegacyTenancyOnboardingForm,
+  TenancyTable,
+  TenancyForm,
+} from "@views/tenancies/TenancyComponents";
 import { TENANCY_STATUS_VALUES } from "@server/schema/tenancy.schema";
 import {
   htmxResponse,
@@ -27,8 +34,12 @@ import { getCookie } from "hono/cookie";
 import { html } from "hono/html"; // For the OOB/Partial helpers
 import { SelectionDialog } from "@server/views/components/SelectionDialog";
 import { currencyConvertor } from "@server/lib/utils";
+import { LegacyTenancyOnboardingService } from "@server/services/legacy-tenancy-onboarding.service";
 
 export const tenancyRoute = new Hono<AppEnv>();
+
+const toDateValue = (value?: Date) => (value ? value.toISOString().split("T")[0] : undefined);
+const isAdminUser = (roles: string[]) => roles.includes("admin");
 
 const statusUpdateSchema = z.object({
   status: z.enum(TENANCY_STATUS_VALUES),
@@ -58,6 +69,7 @@ tenancyRoute.get("/test", async (c) => {
 tenancyRoute.get("/", async (c) => {
   const db = c.var.db;
   const user = c.var.auth.user!;
+  const isAdmin = isAdminUser(user.roles);
 
   const selectedPropCookie = getCookie(c, "selected_property_id");
   const globalPropertyId = selectedPropCookie ? Number(selectedPropCookie) : null;
@@ -65,7 +77,7 @@ tenancyRoute.get("/", async (c) => {
 
   // 1. Build Query
   const whereClause = and(
-    eq(property.landlordId, user.id),
+    isAdmin ? undefined : eq(property.landlordId, user.id),
     globalPropertyId ? eq(tenancy.propertyId, globalPropertyId) : undefined,
     showAll ? undefined : ne(tenancy.status, "closed"),
   );
@@ -98,11 +110,13 @@ tenancyRoute.get("/", async (c) => {
 // --- 2. GET /admin/tenancies/create ---
 tenancyRoute.get("/create", async (c) => {
   const db = c.var.db;
-  const userId = c.var.auth.user!.id;
+  const user = c.var.auth.user!;
+  const userId = user.id;
+  const isAdmin = isAdminUser(user.roles);
   const myProperties = await db
     .select()
     .from(property)
-    .where(and(eq(property.landlordId, userId), isNull(property.deletedAt)));
+    .where(and(isAdmin ? undefined : eq(property.landlordId, userId), isNull(property.deletedAt)));
 
   if (myProperties.length === 0) {
     htmxToast(c, "No Properties Found", {
@@ -155,18 +169,118 @@ tenancyRoute.get("/rooms-select", async (c) => {
   `);
 });
 
+tenancyRoute.get("/legacy-onboard", async (c) => {
+  const db = c.var.db;
+  const actor = c.var.auth.user!;
+  const landlordId = actor.id;
+  const isAdmin = isAdminUser(actor.roles);
+  const myProperties = await db
+    .select()
+    .from(property)
+    .where(and(isAdmin ? undefined : eq(property.landlordId, landlordId), isNull(property.deletedAt)));
+
+  if (myProperties.length === 0) {
+    htmxToast(c, "No Properties Found", {
+      description: "You must create a property before importing a tenancy.",
+      type: "error",
+    });
+    return c.body(null, 400);
+  }
+
+  return htmxResponse(
+    c,
+    "Legacy Tenant Onboarding",
+    LegacyTenancyOnboardingForm({
+      properties: myProperties,
+    }),
+  );
+});
+
+tenancyRoute.get("/legacy-onboard/rooms", async (c) => {
+  const db = c.var.db;
+  const actor = c.var.auth.user!;
+  const landlordId = actor.id;
+  const isAdmin = isAdminUser(actor.roles);
+  const propertyId = Number(c.req.query("propertyId"));
+  const selectedRoomId = Number(c.req.query("roomId") || "");
+
+  if (!propertyId) return c.html(LegacyRoomAssignment({}));
+
+  const [ownedProperty] = await db
+    .select({ id: property.id })
+    .from(property)
+    .where(
+      and(
+        eq(property.id, propertyId),
+        isAdmin ? undefined : eq(property.landlordId, landlordId),
+        isNull(property.deletedAt),
+      ),
+    );
+
+  if (!ownedProperty) return c.html(LegacyRoomAssignment({}));
+
+  const availableRooms = await db
+    .select()
+    .from(room)
+    .where(
+      and(
+        eq(room.propertyId, propertyId),
+        inArray(room.status, ["vacant_ready", "vacant_maintenance", "advertised"]),
+        isNull(room.deletedAt),
+      ),
+    );
+
+  return c.html(
+    LegacyRoomAssignment({
+      rooms: availableRooms,
+      selectedRoomId: Number.isNaN(selectedRoomId) ? undefined : selectedRoomId,
+    }),
+  );
+});
+
+tenancyRoute.get("/legacy-onboard/room-preview", async (c) => {
+  const db = c.var.db;
+  const actor = c.var.auth.user!;
+  const landlordId = actor.id;
+  const isAdmin = isAdminUser(actor.roles);
+  const propertyId = Number(c.req.query("propertyId"));
+  const roomId = Number(c.req.query("roomId"));
+
+  if (!propertyId || !roomId) return c.html(LegacyRoomPreview({}));
+
+  const record = await LegacyTenancyOnboardingService.previewRoomRent(
+    db,
+    landlordId,
+    propertyId,
+    roomId,
+    isAdmin,
+  );
+
+  if (!record) return c.html(LegacyRoomPreview({}));
+
+  return c.html(
+    LegacyRoomPreview({
+      roomName: record.room.name,
+      amountCents: record.room.baseRentAmount,
+      frequency: record.property.rentFrequency,
+    }),
+  );
+});
+
 // --- 4. POST /admin/tenancies (Create with D1 Batch) ---
 tenancyRoute.post("/", zValidator("form", createTenancyFormSchema), async (c) => {
   const db = c.var.db;
   const data = c.req.valid("form");
-  const landlordId = c.var.auth.user!.id;
+  const actor = c.var.auth.user!;
+  const landlordId = actor.id;
+  const isAdmin = isAdminUser(actor.roles);
 
   // Helper to re-render form with errors
   const renderError = async (message: string, field?: "email" | "roomId") => {
     const myProperties = await db
       .select()
       .from(property)
-      .where(and(eq(property.landlordId, landlordId), isNull(property.deletedAt)));
+      .where(and(isAdmin ? undefined : eq(property.landlordId, landlordId), isNull(property.deletedAt)));
 
     // Re-fetch rooms if property was selected
     const currentRooms = await db
@@ -204,7 +318,7 @@ tenancyRoute.post("/", zValidator("form", createTenancyFormSchema), async (c) =>
       .where(
         and(
           eq(property.id, data.propertyId),
-          eq(property.landlordId, landlordId),
+          isAdmin ? undefined : eq(property.landlordId, landlordId),
           isNull(property.deletedAt),
         ),
       );
@@ -319,11 +433,160 @@ tenancyRoute.post("/", zValidator("form", createTenancyFormSchema), async (c) =>
   }
 });
 
+tenancyRoute.post(
+  "/legacy-onboard",
+  zValidator("form", legacyTenancyOnboardingFormSchema, async (result, c) => {
+    if (!result.success) {
+      const db = (c as any).var.db as AppEnv["Variables"]["db"];
+      const actor = (c as any).var.auth.user as NonNullable<AppEnv["Variables"]["auth"]["user"]>;
+      const landlordId = actor.id;
+      const isAdmin = isAdminUser(actor.roles);
+      const rawBody = await c.req.parseBody();
+      const propertyId = Number(rawBody.propertyId);
+      const roomId = Number(rawBody.roomId);
+      const myProperties = await db
+        .select()
+        .from(property)
+        .where(and(isAdmin ? undefined : eq(property.landlordId, landlordId), isNull(property.deletedAt)));
+      const currentRooms = propertyId
+        ? await db
+            .select()
+            .from(room)
+            .where(
+              and(
+                eq(room.propertyId, propertyId),
+                inArray(room.status, ["vacant_ready", "vacant_maintenance", "advertised"]),
+                isNull(room.deletedAt),
+              ),
+            )
+        : [];
+
+      htmxToast(c, "Validation Failed", {
+        description: "Please check the form for errors.",
+        type: "error",
+      });
+      return htmxResponse(
+        c,
+        "Legacy Tenant Onboarding",
+        LegacyTenancyOnboardingForm({
+          properties: myProperties,
+          rooms: currentRooms,
+          values: {
+            email: typeof rawBody.email === "string" ? rawBody.email : undefined,
+            propertyId: Number.isFinite(propertyId) ? propertyId : undefined,
+            roomId: Number.isFinite(roomId) ? roomId : undefined,
+            leaseStartDate:
+              typeof rawBody.leaseStartDate === "string" ? rawBody.leaseStartDate : undefined,
+            leaseEndDate: typeof rawBody.leaseEndDate === "string" ? rawBody.leaseEndDate : undefined,
+            billedUpToDate:
+              typeof rawBody.billedUpToDate === "string" ? rawBody.billedUpToDate : undefined,
+            previousRentAmount:
+              typeof rawBody.previousRentAmount === "string" ? rawBody.previousRentAmount : undefined,
+            previousFrequency:
+              rawBody.previousFrequency === "weekly" ||
+              rawBody.previousFrequency === "fortnightly" ||
+              rawBody.previousFrequency === "monthly"
+                ? rawBody.previousFrequency
+                : undefined,
+            bondAmount: typeof rawBody.bondAmount === "string" ? rawBody.bondAmount : undefined,
+            bondPaid: Array.isArray(rawBody.bondPaid)
+              ? rawBody.bondPaid.includes("true")
+              : rawBody.bondPaid === "true" || rawBody.bondPaid === "on",
+          },
+          errors: result.error.flatten().fieldErrors,
+        }),
+      );
+    }
+  }),
+  async (c) => {
+    const db = c.var.db;
+    const actor = c.var.auth.user!;
+    const landlordId = actor.id;
+    const isAdmin = isAdminUser(actor.roles);
+    const data = c.req.valid("form");
+
+    const renderError = async (message: string, field?: string) => {
+      const myProperties = await db
+        .select()
+        .from(property)
+        .where(and(isAdmin ? undefined : eq(property.landlordId, landlordId), isNull(property.deletedAt)));
+      const currentRooms = data.propertyId
+        ? await db
+            .select()
+            .from(room)
+            .where(
+              and(
+                eq(room.propertyId, data.propertyId),
+                inArray(room.status, ["vacant_ready", "vacant_maintenance", "advertised"]),
+                isNull(room.deletedAt),
+              ),
+            )
+        : [];
+
+      htmxToast(c, message, { type: "error" });
+      return htmxResponse(
+        c,
+        "Legacy Tenant Onboarding",
+        LegacyTenancyOnboardingForm({
+          properties: myProperties,
+          rooms: currentRooms,
+          values: {
+            email: data.email,
+            propertyId: data.propertyId,
+            roomId: data.roomId,
+            leaseStartDate: toDateValue(data.leaseStartDate),
+            leaseEndDate: toDateValue(data.leaseEndDate),
+            billedUpToDate: toDateValue(data.billedUpToDate),
+            previousRentAmount: data.previousRentAmount.toString(),
+            previousFrequency: data.previousFrequency,
+            bondAmount: data.bondAmount?.toString(),
+            bondPaid: data.bondPaid,
+          },
+          errors: field ? { [field]: [message] } : undefined,
+        }),
+      );
+    };
+
+    try {
+      const result = await LegacyTenancyOnboardingService.onboard(db, {
+        email: data.email,
+        propertyId: data.propertyId,
+        roomId: data.roomId,
+        leaseStartDate: data.leaseStartDate,
+        leaseEndDate: data.leaseEndDate,
+        billedUpToDate: data.billedUpToDate,
+        previousRentAmountCents: currencyConvertor(data.previousRentAmount.toString()),
+        previousFrequency: data.previousFrequency,
+        bondAmountCents:
+          data.bondAmount !== undefined ? currencyConvertor(data.bondAmount.toString()) : undefined,
+        bondPaid: data.bondPaid,
+        landlordId,
+        isAdmin,
+      });
+
+      flashToast(
+        c,
+        `Legacy tenant imported. ${result.legacyInvoiceCount} legacy invoice(s), ${result.upcomingInvoiceCount} new rent invoice(s)${result.bondCreated ? ", bond invoice created" : ""}.`,
+        { type: "success" },
+      );
+      return htmxRedirect(c, "/admin/tenancies");
+    } catch (error: any) {
+      const message = error?.message || "Legacy onboarding failed.";
+      if (message.includes("User not found")) return renderError(message, "email");
+      if (message.includes("Room")) return renderError(message, "roomId");
+      if (message.includes("billed")) return renderError(message, "billedUpToDate");
+      return renderError(message);
+    }
+  },
+);
+
 // --- 5. GET /admin/tenancies/:id/edit ---
 tenancyRoute.get("/:id/edit", async (c) => {
   const db = c.var.db;
   const id = Number(c.req.param("id"));
-  const landlordId = c.var.auth.user!.id;
+  const actor = c.var.auth.user!;
+  const landlordId = actor.id;
+  const isAdmin = isAdminUser(actor.roles);
 
   const [record] = await db
     .select({ t: tenancy, u: users, p: property })
@@ -332,12 +595,12 @@ tenancyRoute.get("/:id/edit", async (c) => {
     .innerJoin(users, eq(tenancy.userId, users.id))
     .where(eq(tenancy.id, id));
 
-  if (!record || record.p.landlordId !== landlordId) return c.text("Unauthorized", 403);
+  if (!record || (!isAdmin && record.p.landlordId !== landlordId)) return c.text("Unauthorized", 403);
 
   const myProperties = await db
     .select()
     .from(property)
-    .where(and(eq(property.landlordId, landlordId), isNull(property.deletedAt)));
+    .where(and(isAdmin ? undefined : eq(property.landlordId, landlordId), isNull(property.deletedAt)));
 
   // Fetch rooms for this property
   // We need the CURRENT room (even if occupied) + any VACANT rooms
@@ -369,7 +632,9 @@ tenancyRoute.post("/:id/update", zValidator("form", updateTenancyFormSchema), as
   const db = c.var.db;
   const id = Number(c.req.param("id"));
   const data = c.req.valid("form");
-  const landlordId = c.var.auth.user!.id;
+  const actor = c.var.auth.user!;
+  const landlordId = actor.id;
+  const isAdmin = isAdminUser(actor.roles);
 
   // Verify ownership
   const [existing] = await db
@@ -378,7 +643,7 @@ tenancyRoute.post("/:id/update", zValidator("form", updateTenancyFormSchema), as
     .innerJoin(property, eq(tenancy.propertyId, property.id))
     .where(eq(tenancy.id, id));
 
-  if (!existing || existing.p.landlordId !== landlordId) return c.text("Unauthorized", 403);
+  if (!existing || (!isAdmin && existing.p.landlordId !== landlordId)) return c.text("Unauthorized", 403);
 
   // LOGIC: Did they switch rooms?
   // 1. If switching rooms, mark OLD room vacant
@@ -420,13 +685,15 @@ tenancyRoute.patch("/:id/status", zValidator("form", statusUpdateSchema), async 
   const db = c.var.db;
   const id = Number(c.req.param("id"));
   const { status, force } = c.req.valid("form");
-  const userId = c.var.auth.user!.id;
+  const actor = c.var.auth.user!;
+  const userId = actor.id;
+  const isAdmin = isAdminUser(actor.roles);
 
   // Initialize Service
   const tenancyService = new TenancyService(db);
 
   try {
-    const updated = await tenancyService.updateStatus(id, status, userId, !!force);
+    const updated = await tenancyService.updateStatus(id, status, userId, isAdmin, !!force);
     htmxToast(c, "Status Updated", { type: "success" });
     return c.html(TenancyStatusManager({ tenancy: updated }));
   } catch (error: any) {
@@ -474,7 +741,9 @@ tenancyRoute.patch("/:id/status", zValidator("form", statusUpdateSchema), async 
 tenancyRoute.delete("/:id", async (c) => {
   const db = c.var.db;
   const id = Number(c.req.param("id"));
-  const landlordId = c.var.auth.user!.id;
+  const actor = c.var.auth.user!;
+  const landlordId = actor.id;
+  const isAdmin = isAdminUser(actor.roles);
 
   // Verify ownership
   const [existing] = await db
@@ -483,7 +752,7 @@ tenancyRoute.delete("/:id", async (c) => {
     .innerJoin(property, eq(tenancy.propertyId, property.id))
     .where(eq(tenancy.id, id));
 
-  if (!existing || existing.p.landlordId !== landlordId) return c.text("Unauthorized", 403);
+  if (!existing || (!isAdmin && existing.p.landlordId !== landlordId)) return c.text("Unauthorized", 403);
 
   // Mark room as vacant if linked
   if (existing.t.roomId) {
